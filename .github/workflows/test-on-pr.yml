@@ -1,0 +1,76 @@
+# This workflow will check the module called `src` within the `CompoRes` repository
+# for changes, install Python, dependencies, and run lint and tests
+
+name: Test on PR
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    types: [ opened, synchronize ]
+    branches: [ main ]
+
+jobs:
+  test-src:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+      checks: write
+    defaults:
+      run:
+        shell: bash -l {0}
+    strategy:
+      fail-fast: true
+      matrix:
+        python-version: [3.10.5,3.10.13]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+      - name: Check for changes
+        env:
+          CONTAINS_PROJECT: ${{ contains(steps.changed-files.outputs.all_changed_files, 'src/compores') ||
+                              contains(steps.changed-files.outputs.all_changed_files, 'tests/') }}
+        run: |
+          echo "PROJECT_CHANGED=$(echo $CONTAINS_PROJECT)" >> $GITHUB_ENV
+      - name: Install linter
+        if: env.PROJECT_CHANGED == 'true'
+        run: pip install flake8
+      - name: Run linter
+        if: env.PROJECT_CHANGED == 'true'
+        working-directory: ./src/compores
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --count --max-complexity=30 --max-line-length=120 --statistics
+      - name: Set up Miniconda
+        uses: conda-incubator/setup-miniconda@v2
+        with:
+          activate-environment: compores_env
+          environment-file: ./env/compores_env.yml
+          python-version: ${{ matrix.python-version }}
+          auto-activate-base: false
+      - run: conda info
+      - run: conda list
+      - run: conda config --show-sources
+      - name: Install dependencies
+        run: |
+          conda activate compores_env
+      - name: Run tests and build coverage file
+        if: env.PROJECT_CHANGED == 'true'
+        run: |
+          export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src"
+          export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src/compores"
+          pytest --cov-config=.coveragerc --junitxml=pytest.xml \
+          --cov-report=term-missing:skip-covered \
+          --cov src/compores tests/ | tee test_coverage.txt
+      - name: Pytest coverage comment
+        id: coverageComment
+        uses: MishaKav/pytest-coverage-comment@main
+        with:
+          title: Coverage Report
+          pytest-coverage-path: test_coverage.txt
+          junitxml-path: pytest.xml

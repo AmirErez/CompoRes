@@ -1,0 +1,34 @@
+# Please check the parameters, and adjust them according to your circumstances
+
+# Project name
+PROJECT: test
+# ================== Control of the workflow ==================
+# Enter the project experiment parameters
+GROUP1: 50otu
+
+GROUP2: 200samples
+
+GROUP3: synthetic
+
+# Paths to files
+PATH_TO_MICROBIOME: ../tests/data/artificial_experiment_data/microbiome
+PATH_TO_RESPONSE: ../tests/data/artificial_experiment_data/response
+PATH_TO_METADATA: ../tests/data/artificial_experiment_data/metadata
+PATH_TO_OUTPUTS: ./artificial_experiment_output
+
+# OCU sampling rate
+OCU_SAMPLING_RATE: 1
+
+# Additional Log-Ratio Transformation method applied in CoDA (available:"pairs", runs in addition to "CLR")
+CODA_METHOD: pairs
+
+# Correlation calculation method (choose one from:"spearman","pearson")
+CORR: pearson
+
+# Sample shuffling method ("response" or "microbiome"), number of shuffles per cycle, number of shuffling cycles
+SHUFFLE: microbiome
+N_SHUFFLES: 10
+SHUFFLE_CYCLES: 5
+
+# Maximum number of workers for parallel processing
+N_WORKERS:

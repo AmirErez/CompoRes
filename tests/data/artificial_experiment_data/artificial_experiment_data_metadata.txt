@@ -1,0 +1,10 @@
+noise - 0.75
+
+    linear_const = 0.85
+    noise = noise_level * np.random.randn(num_individuals)  # Gaussian noise
+
+    balance = np.sqrt(0.5) * np.log(samples[:, num] / samples[:, den])
+    bal_response = balance * linear_const + noise
+
+200 samples
+50 otus
