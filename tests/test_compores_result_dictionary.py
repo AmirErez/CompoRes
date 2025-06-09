@@ -56,7 +56,7 @@ class TestCompoResResultDictionary:
 
         expected_exp_name = "50otu-200samples-synthetic"
         expected_dir_name_keys = set(range(3, 51))
-        # expected_dir_name_keys.discard(46)
+        expected_dir_name_keys.discard(46)
 
         runner = ComporesMain(input_path)
         runner.run()
