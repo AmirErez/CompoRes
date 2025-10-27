@@ -7,8 +7,6 @@ This is a pre-view version (`v0.1.0`), which corresponds to the code submitted a
 
 # CompoRes Package
 
-![license](https://img.shields.io/badge/license-GNU_GPL-green)
-
 `CompoRes` package is an algorithmic package designed to analyze the connection between changes
 in the host’s microbiota and the host’s gene expression. It addresses two significant analysis
 challenges: compositional statistics in the microbiota, and multiple hypothesis testing which
