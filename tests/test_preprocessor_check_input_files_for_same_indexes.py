@@ -84,9 +84,9 @@ class TestCheckInputFilesForSameIndexes:
         file1_path, file2_path, expected_df1, expected_df2 = setup_teardown_for_same_sample_sets
         logger = logger_mock
         preprocess = Preprocessor(
-            logger, '', '', '', file1_path, file2_path, '', '', '', '', '', '', '','', 1
+            logger, '', '', '', file1_path, file2_path, '', '', '', '', '', '', '','', ['CLR'], 1000, 1
         )
-        preprocess.check_input_files_for_same_indexes(file1_path, file2_path, 'raw')
+        preprocess.check_input_files_for_same_unique_indices(file1_path, file2_path, 'raw')
 
         actual_df1 = pd.read_csv(os.path.join(os.getcwd(), 'preprocessed_samples/microbiome/file1.tsv'), sep='\t', index_col=0)
         actual_df2 = pd.read_csv(os.path.join(os.getcwd(), 'preprocessed_samples/response/file2.tsv'), sep='\t', index_col=0)
@@ -98,9 +98,9 @@ class TestCheckInputFilesForSameIndexes:
         file1_path, file2_path, expected_df1, expected_df2 = setup_teardown_for_different_sample_sets
         logger = logger_mock
         preprocess = Preprocessor(
-            logger, '', '', '', file1_path, file2_path, '', '', '', '', '', '', '','', 1
+            logger, '', '', '', file1_path, file2_path, '', '', '', '', '', '', '','', ['CLR'], 1000, 1
         )
-        preprocess.check_input_files_for_same_indexes(file1_path, file2_path, 'raw')
+        preprocess.check_input_files_for_same_unique_indices(file1_path, file2_path, 'raw')
 
         actual_df1 = pd.read_csv(os.path.join(os.getcwd(), 'preprocessed_samples/microbiome/file1.tsv'), sep='\t', index_col=0)
         actual_df2 = pd.read_csv(os.path.join(os.getcwd(), 'preprocessed_samples/response/file2.tsv'), sep='\t', index_col=0)

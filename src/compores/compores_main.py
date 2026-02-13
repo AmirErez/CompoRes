@@ -17,31 +17,78 @@ import numpy as np
 import pandas as pd
 from scipy import stats
 
-from .compores_otu_heatmaps import ComporesClusteredHeatmapCalculations
+from .compores_otu_p_value_tracing import ComporesClusteredPValueCalculations
 from .compores_compute import CompoRes
-from .compores_plotting import plot_ocu_best_balance_by_response, plot_correlation_signal_significance_over_ocus, \
-    create_clustered_heatmap
+from .compores_plotting import plot_ocu_best_balance_by_response, plot_correlation_signal_significance_over_ocus
+from .exceptions_module import (
+    DuplicatedIndices,
+    MisMatchFiles,
+    NonNumericDataFrameError,
+    NegativeValuesDataFrameError,
+    EmptyDataFrame,
+    MinDataFrame,
+    NoResponseLabelFound,
+    OutlierCheckFailed,
+)
 from .logger_module import CompoResLogger
-from .preprocessing import Preprocessor, PREPROCESSING_RESULTS
+from .preprocessing import Preprocessor, PREPROCESSING_RESULTS, OUTLIER_DETECTION
 from .utils import load_configuration, save_file, load_file, shuffle_samples, shuffle_sample_values, \
     calculate_root_mean_square_error, fetch_synthetic_analysis_input_data, bootstrap_p_value, extend_instance, \
-    cast_nested_dict_to_array, deduplicate_synthetic_analysis_input_data, gev_p_value
+    cast_nested_dict_to_array, deduplicate_synthetic_analysis_input_data, gev_p_value, fetch_full_target_response_label
 
-CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "../..", "configs", "config.yaml")
+CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "../..", "configs", "config_synthetic_data.yaml")
+
+# CompoRes results path constants
+PLOT_PATH = 'plots'
+RESPONSE_VS_BEST_BALANCE_PATH = 'response_vs_best_balance'
+SIGNAL_SIGNIFICANCE_PATH = 'compores_signal_significance'
+
+BALANCE_CALCULATION_RESULTS_PATH = 'balance_calculation_results'
+SAMPLE_LEVEL_BALANCE_RESULTS = "sample_level_results"
+OCU_LEVEL_BALANCE_RESULTS = "ocu_level_results"
+RESPONSE_RANKING = 'compores_response_ranking'
+BASIC_RESULTS = 'compores_basic_results'
+LOGS = 'logs'
+
+CORRELATION_COEFFICIENT_ARRAYS_FILE_NAME = "correlation_coefficient.pkl"
+OCU_DICTIONARY_FILE_NAME = "ocu_dictionary.pkl"
+ENRICHED_OCU_DICTIONARY_FILE_NAME = "ocu_dictionary_compores_enriched.pkl"
+SHUFFLES_ENRICHED_OCU_DICTIONARY_FILE_NAME = "ocu_dictionary_shuffles_enriched.pkl"
+SAMPLED_OCU_CASES_FILE_NAME = "sampled_ocu_cases.pkl"
+RESPONSE_INDEX_FILE_NAME = "response_index.pkl"
+SLOPE_FILE_NAME = "slope.pkl"
+RMSE_FILE_NAME = "rmse.pkl"
+MEAN_RMSE_FILE_NAME = "mean_rmse.pkl"
+INTERCEPT_FILE_NAME = "intercept.pkl"
+CORRELATION_COEFFICIENT_SHUFFLE_ARRAYS_FILE_NAME = "pcc_shuffle_arrays.pkl"
+SHUFFLE_MEDIAN_FILE_NAME = "shuffle_median.pkl"
+TAXA_SHUFFLED_ARRAYS_FILE_NAME = "taxa_shuffled_arrays.pkl"
+P_VALUES_FILE_NAME = "p_values.pkl"
+GEV_PARAMETERS_FILE_NAME = "gev_parameters.pkl"
+MEAN_LOG_P_VALUE_FILE_NAME = "minus_mean_log_p_value.pkl"
+BOOTSTRAP_MEAN_LOG_P_VALUE_FILE_NAME = "bootstrap_minus_mean_log_p_value.pkl"
+BOOTSTRAP_P_VALUE_FILE_NAME = "p_values_bootstrap.pkl"
 
 CONFIDENCE_LEVELS = {"2_5": 2.5, "25": 25, "75": 75, "97_5": 97.5}
+
+# Synthetic power analysis constants
+NUMBER_OF_RESPONSES_TO_GENERATE = 30
+NUMBER_OF_EXPERIMENT_REPEATS = 15
+SYNTHETIC_DATA_PATH = "synthetic_data"
+SYNTHETIC_ANALYSIS_RESULTS_PATH = "synthetic_power_analysis"
 
 
 class OneCaseCombination:
 
     def __init__(
             self, logger: Logger, config: dict, plotting_flag: bool, s1: str, s2: str, s3: str, step=0, n_workers=4,
-            coda_method="CLR", ocu_case=None
+            coda_method="CLR", ocu_case=None, deduplicate: bool = False
     ):
         self.logger = logger
         self.config = config
         self.plotting_flag = plotting_flag
         self.ocu_case = ocu_case
+        self.deduplicate = deduplicate
         self.s1 = str(s1)
         self.s2 = str(s2)
         self.s3 = str(s3)
@@ -53,39 +100,31 @@ class OneCaseCombination:
         self.n_shuffles = self.config["N_SHUFFLES"]
         self.shuffle_cycles = self.config["SHUFFLE_CYCLES"]
         self.ocu_sampling_rate = self.config["OCU_SAMPLING_RATE"]
-        (
-            self.path_to_microbiome, self.path_to_response, self.meta_data,
-            self.path_to_fastspar_res, self.path_to_fastspar_corr,
-            self.path_to_fastspar_cov, self.path_to_microbiome_clustering, self.path_to_prepared_response
-        ) = self.set_paths()
         self.outputs_path = self.config["PATH_TO_OUTPUTS"]
-        self.ocu_clustering_results_path = str(
-            os.path.join(self.outputs_path, PREPROCESSING_RESULTS, 'microbiome', 'OCUs')
-        )
+        self.meta_data, self.ocu_clustering_results_path, self.path_to_prepared_response = self.set_paths()
         self.balance_results_path = os.path.join(
-            self.outputs_path, 'balance_calculation_results', f'{s1}-{s2}-{s3}', self.coda_method
+            self.outputs_path, BALANCE_CALCULATION_RESULTS_PATH, f'{s1}-{s2}-{s3}', self.coda_method
         )
         self.intermediate_results_path = os.path.join(
-            self.outputs_path, 'compores_basic_results', f'{s1}-{s2}-{s3}', self.coda_method)
+            self.outputs_path, BASIC_RESULTS, f'{s1}-{s2}-{s3}', self.coda_method)
         self.significance_plots_path = os.path.join(
-            self.outputs_path, 'plots', 'compores_signal_significance', f'{s1}-{s2}-{s3}', self.coda_method
+            self.outputs_path, PLOT_PATH, SIGNAL_SIGNIFICANCE_PATH, f'{s1}-{s2}-{s3}', self.coda_method
         )
         self.response_vs_balance_plots_path = os.path.join(
-            self.outputs_path, 'plots', 'response_vs_best_balance', f'{s1}-{s2}-{s3}', self.coda_method
+            self.outputs_path, PLOT_PATH, RESPONSE_VS_BEST_BALANCE_PATH, f'{s1}-{s2}-{s3}', self.coda_method
         )
-        self.log_files_path = str(os.path.join(self.outputs_path, 'logs', f'{s1}-{s2}-{s3}'))
-        self.imputed_samples_dictionary = {}
-        self.clustered_ocu_dictionary = {}
-        self.sampled_cluster_ocu_dictionary_keys = self.load_array("sampled_ocu_cases.pkl")
-        self.ocu_dictionary = self.load_dict("ocu_dictionary.pkl")
-        self.response_index = self.load_array("response_index.pkl")
-        self.resulting_cluster_dict = self.load_dict("cluster_dict.pkl")
-        self.mean_log_p_value_dict = self.load_dict("mean_log_p_value.pkl")
-        self.rmse_dict = self.load_dict("rmse.pkl")
-        self.slope_dict = self.load_dict("slope.pkl")
-        self.intercept_dict = self.load_dict("intercept.pkl")
-        self.mean_rmse_dict = self.load_dict("mean_rmse.pkl")
+        self.log_files_path = str(os.path.join(self.outputs_path, LOGS, f'{s1}-{s2}-{s3}'))
+        self.sampled_cluster_ocu_dictionary_keys = self.load_array(SAMPLED_OCU_CASES_FILE_NAME)
+        self.ocu_dictionary = self.load_dict(OCU_DICTIONARY_FILE_NAME)
+        self.response_index = self.load_array(RESPONSE_INDEX_FILE_NAME)
+        self.correlation_coefficient_dict = self.load_dict(CORRELATION_COEFFICIENT_ARRAYS_FILE_NAME)
+        self.mean_log_p_value_dict = self.load_dict(MEAN_LOG_P_VALUE_FILE_NAME)
+        self.rmse_dict = self.load_dict(RMSE_FILE_NAME)
+        self.slope_dict = self.load_dict(SLOPE_FILE_NAME)
+        self.intercept_dict = self.load_dict(INTERCEPT_FILE_NAME)
+        self.mean_rmse_dict = self.load_dict(MEAN_RMSE_FILE_NAME)
         self.state = self.load_state()
+        self.ocu_limit = int(self.config["MAX_OCU"])
 
     def get_config(self) -> dict:
         """
@@ -95,13 +134,13 @@ class OneCaseCombination:
         """
         return self.config
 
-    def get_resulting_cluster_dict(self) -> dict:
+    def get_correlation_coefficient_dict(self) -> dict:
         """
         This function fetches the resulting cluster dictionary.
 
         :return: The resulting cluster dictionary
         """
-        return self.resulting_cluster_dict
+        return self.correlation_coefficient_dict
 
     def get_mean_log_p_value_dict(self) -> dict:
         """
@@ -145,21 +184,14 @@ class OneCaseCombination:
 
     def set_paths(self) -> tuple:
         """
-        This function sets the paths to the files that are used by the Preprocessor instance.
+        This function sets the paths to the files that are used by the OneCaseCombination instance.
         """
         s1 = self.s1
         s2 = self.s2
-        s3 = self.s3
-        path_to_preprocessing_results = str(os.path.join(self.config["PATH_TO_OUTPUTS"], PREPROCESSING_RESULTS))
-        path_to_fastspar = str(os.path.join(path_to_preprocessing_results, 'fastspar'))
+        path_to_preprocessing_results = str(os.path.join(self.outputs_path, PREPROCESSING_RESULTS))
         return (
-            os.path.join(self.config["PATH_TO_MICROBIOME"], f"{s1}-{s2}-{s3}.tsv"),
-            os.path.join(self.config["PATH_TO_RESPONSE"], f"{s1}-{s2}.tsv"),
             os.path.join(self.config["PATH_TO_METADATA"], f"{s1}-{s2}-metadata.tsv"),
-            path_to_fastspar,
-            os.path.join(path_to_fastspar, f"taxa_correlation_{s1}-{s2}-{s3}.tsv"),
-            os.path.join(path_to_fastspar, f"taxa_covariance_{s1}-{s2}-{s3}.tsv"),
-            os.path.join(path_to_preprocessing_results, 'microbiome', f"{s1}-{s2}-{s3}.tsv"),
+            os.path.join(self.outputs_path, PREPROCESSING_RESULTS, 'microbiome', 'OCUs'),
             os.path.join(path_to_preprocessing_results, 'response', f"{s1}-{s2}.tsv"),
         )
 
@@ -236,43 +268,7 @@ class OneCaseCombination:
             f'response_{i + 1}_{col}' for i, col in enumerate(response.columns)
         ]
         self.response_index = [col.split("\n")[0] for col in self.response_index]
-        save_file(self.response_index, "response_index.pkl", self.intermediate_results_path)
-
-    def _prepare_list_of_ocu_folders_to_run_over(self):
-        """Prepares a list of OCU folders to run over as resulted at the preprocessing step."""
-        s1 = self.s1
-        s2 = self.s2
-        s3 = self.s3
-        suffix_name = f"{s1}-{s2}-{s3}"
-
-        base_path = str(os.path.join(self.ocu_clustering_results_path, suffix_name))
-        with open(os.path.join(base_path, f'{suffix_name}_ocu_clustering_dictionary.json'), 'r') as f:
-            self.clustered_ocu_dictionary = json.load(f)
-        if self.plotting_flag:
-            sub_folders = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
-            # sort by number value and not lexicographically
-            sub_folders = sorted(sub_folders, key=lambda x: int(x))
-            # from the OTU number down to MIN_OCU_NUM; sample every ocu_sampling_rate folder to dilute calculations
-            sub_folders = sub_folders[::-1]
-        else:
-            sub_folders = [self.ocu_case]
-
-        # store the sampled cluster ocu dictionary keys
-        self.sampled_cluster_ocu_dictionary_keys = sub_folders
-        save_file(self.sampled_cluster_ocu_dictionary_keys, "sampled_ocu_cases.pkl", self.intermediate_results_path)
-
-    def _prepare_filtered_copy_of_ocu_dictionary_to_enrich(self):
-        """ After the OCU folders are sampled, the function filters the initial OCU dictionary to only include
-        information on the sampled OCUs to enrich it with the results on the calculations down the stream.
-        """
-        selected_keys = [f"{ocu_num} OCUs" for ocu_num in self.sampled_cluster_ocu_dictionary_keys]
-        self.ocu_dictionary = {
-            k: self.clustered_ocu_dictionary[k] for k in selected_keys if k in self.clustered_ocu_dictionary
-        }
-        for key in self.ocu_dictionary:
-            for result_key in ["NUM_OCU", "DEN_OCU", "rho", "rmse"]:
-                self.ocu_dictionary[key][result_key] = {}
-        save_file(self.ocu_dictionary, "ocu_dictionary.pkl", self.intermediate_results_path)
+        save_file(self.response_index, RESPONSE_INDEX_FILE_NAME, self.intermediate_results_path)
 
     def _read_preprocessed_results(self):
 
@@ -288,6 +284,11 @@ class OneCaseCombination:
                         os.path.join(base_path, f"{sub_folder_name}", item), sep='\t', header=0, index_col=0
                     )
                     num_of_otu_clusters = microbiome.shape[1]
+                    if num_of_otu_clusters > self.ocu_limit and self.coda_method != "CLR":
+                        self.logger.warning(
+                            f"Skipping {sub_folder_name} OCU case, as it exceeds the limit ({self.ocu_limit})."
+                        )
+                        continue
 
                     yield microbiome, num_of_otu_clusters, suffix_name
 
@@ -314,13 +315,13 @@ class OneCaseCombination:
 
         path_to_ocu_level_compores_result_data = os.path.join(
             self.balance_results_path,
-            "ocu_level_results",
+            OCU_LEVEL_BALANCE_RESULTS,
             "regular"
         )
         os.makedirs(path_to_ocu_level_compores_result_data, exist_ok=True)
 
-        ocu_dictionary_compores_enriched = self.load_dict("ocu_dictionary_compores_enriched.pkl")
-        ocu_dictionary_shuffle_enriched = self.load_dict("ocu_dictionary_shuffles_enriched.pkl")
+        ocu_dictionary_compores_enriched = self.load_dict(ENRICHED_OCU_DICTIONARY_FILE_NAME)
+        ocu_dictionary_shuffle_enriched = self.load_dict(SHUFFLES_ENRICHED_OCU_DICTIONARY_FILE_NAME)
         ocu_dictionary_shuffle_enriched = {
             f"{k} OCUs": v for k, v in ocu_dictionary_shuffle_enriched.items()
         }
@@ -415,12 +416,12 @@ class OneCaseCombination:
 
         path_to_ocu_level_compores_shuffle_result_data = os.path.join(
             self.balance_results_path,
-            "ocu_level_results",
+            OCU_LEVEL_BALANCE_RESULTS,
             "shuffled"
         )
         os.makedirs(path_to_ocu_level_compores_shuffle_result_data, exist_ok=True)
 
-        taxa_shuffled_arrays = self.load_dict("taxa_shuffled_arrays.pkl")
+        taxa_shuffled_arrays = self.load_dict(TAXA_SHUFFLED_ARRAYS_FILE_NAME)
 
         for exp_name in taxa_shuffled_arrays:
             for ocu_num in taxa_shuffled_arrays[exp_name]:
@@ -447,12 +448,24 @@ class OneCaseCombination:
         taxa_shuffled_arrays.clear()
 
     def run_comp_process_response_subtask(
-            self, response_index: int, response_tag_str: str,
-            microbiome_df: pd.DataFrame, response_df: pd.DataFrame, exp_name_str: str, total_ocu: int):
+        self,
+        response_index: int,
+        response_tag_str: str,
+        microbiome_df: pd.DataFrame,
+        response_df: pd.DataFrame,
+        exp_name_str: str,
+        total_ocu: int,
+        outlier_detection_step_flag: bool = False,
+        outlier_detection_all: bool = False,
+        outlier_detection_masked: bool = False,
+        max_ind: str = None,
+    ):
         """The function runs a CompoRes core task for a specific response feature."""
         value = response_df.iloc[:, response_index].copy()
         response_name = value.name.split('\n')[0]
-        self.logger.info(f"Processing {exp_name_str}.response_{response_index + 1}_{response_name}.{total_ocu}_OCUs")
+        if not outlier_detection_step_flag:
+            log_message = f"Processing {exp_name_str}.response_{response_index + 1}_{response_name}.{total_ocu}_OCUs"
+            self.logger.info(log_message)
         compores_object = CompoRes(
             microbiome_df,
             value,
@@ -463,14 +476,15 @@ class OneCaseCombination:
             corr_type=self.corr_type,
             regular_run_flag=self.plotting_flag
         )
-        compores_object.run_analysis()
+        compores_object.run_analysis(outlier_detection_step_flag=outlier_detection_step_flag, max_ind=max_ind)
         result = compores_object.get_results()
 
-        if self.plotting_flag:
+        if self.plotting_flag and not outlier_detection_step_flag:
+
             response_string = f"response_{response_index + 1}_{response_name}"
             path_to_sample_level_compores_result_data = os.path.join(
                 self.balance_results_path,
-                "sample_level_results",
+                SAMPLE_LEVEL_BALANCE_RESULTS,
                 response_string
             )
             os.makedirs(path_to_sample_level_compores_result_data, exist_ok=True)
@@ -483,12 +497,12 @@ class OneCaseCombination:
 
             csv_file_path = os.path.join(
                 path_to_sample_level_compores_result_data,
-                output_name + "-clr_correlation_values.csv"
+                f"{output_name}-clr_correlation_values.csv"
             )
             if self.coda_method == "pairs":
                 csv_file_path = os.path.join(
                     path_to_sample_level_compores_result_data,
-                    output_name + "-pairs_correlation_values.csv"
+                    f"{output_name}-pairs_correlation_values.csv"
                 )
             with open(csv_file_path, 'w') as f:
                 corr_matrix.to_csv(f)
@@ -502,13 +516,9 @@ class OneCaseCombination:
         slope = lingress_result.slope
         intercept = lingress_result.intercept
         r_value = lingress_result.rvalue
+        se = lingress_result.stderr
         # lingress_result.pvalue, lingress_result.stderr, getattr(lingress_result, 'intercept_stderr', None)
         rmse_val = calculate_root_mean_square_error(result['Final_LR_Value'], result['Response'], slope, intercept)
-        # num_taxa_array = result["NUM_Taxa_List"].iloc[0]
-        # if self.coda_method != "CLR":
-        #     den_taxa_array = result["DEN_Taxa_List"].iloc[0]
-        # else:
-        #     den_taxa_array = None
         num_taxa_array = result["NUM_OCU"].iloc[0]
         if self.coda_method != "CLR":
             den_taxa_array = result["DEN_OCU"].iloc[0]
@@ -517,60 +527,94 @@ class OneCaseCombination:
 
         if self.plotting_flag:
 
+            response_string = f"{response_name}"
+
+            if outlier_detection_step_flag:
+                path_to_plots = os.path.join(self.outputs_path, PREPROCESSING_RESULTS, OUTLIER_DETECTION, PLOT_PATH)
+                if outlier_detection_all:
+                    response_string = f"{response_name}_all_samples"
+                elif outlier_detection_masked:
+                    response_string = f"{response_name}_masked_samples"
+            else:
+                path_to_plots = self.response_vs_balance_plots_path
+
             plot_ocu_best_balance_by_response(
                 self.meta_data,
                 response_index,
-                response_name,
+                response_string,
                 total_ocu,
                 exp_name_str, result,
-                self.response_vs_balance_plots_path,
+                path_to_plots,
                 intercept,
                 slope,
                 r_value
             )
 
-        return response_index, response_tag_str, r_value, rmse_val, slope, intercept, num_taxa_array, den_taxa_array
+        return response_index, response_tag_str, r_value, rmse_val, slope, intercept, num_taxa_array, den_taxa_array, se
 
     def run_comp_process_task(
-            self, microbiome: pd.DataFrame, total_ocu_num: int, exp_name: str, response_df: pd.DataFrame) -> tuple:
+            self, microbiome: pd.DataFrame, total_ocu_num: int, exp_name: str, response_df: pd.DataFrame,
+            outlier_detection_step_flag: bool = False,
+            outlier_detection_all: bool = False, outlier_detection_masked: bool = False,
+            n_taxa: dict = None
+    ) -> tuple:
         """The function pools runs of the CompoRes analysis over response features in the response dataframe.
 
         :param microbiome: The microbiome data frame;
         :param total_ocu_num: the total number of clusters in the run;
         :param exp_name: the name of the experiment;
         :param response_df: the response data frame;
+        :param outlier_detection_step_flag: whether the current run is for outlier detection;
+        :param outlier_detection_all: whether the outlier detection run is on all data;
+        :param outlier_detection_masked:  whether the outlier detection run is on data without candidate sample points;
+        :param n_taxa: optional, the dictionary of the nominator taxa per response feature;
         :return: tuple of calculated values: pcc list, rmse list, and a dictionary of response level information.
         """
         response = response_df.copy()
         clustered_ocu_dictionary_enrichment = {f"{total_ocu_num} OCUs": {}}
         for result_key in ["NUM_OCU", "DEN_OCU", "rho", "rmse", "slope", "intercept"]:
             clustered_ocu_dictionary_enrichment[f"{total_ocu_num} OCUs"][result_key] = {}
-        self.logger.info(f"Starting processing {exp_name} with {total_ocu_num} OCUs.")
+        if not outlier_detection_step_flag:
+            self.logger.info(f"Starting processing {exp_name} with {total_ocu_num} OCUs.")
 
+        # TODO: add feature-index json
         num_of_features = response.shape[1]
         pcc = np.zeros(num_of_features)
         rmse = np.zeros(num_of_features)
         sl = np.zeros(num_of_features)
         ic = np.zeros(num_of_features)
+        se = np.zeros(num_of_features)
 
         try:
             with ProcessPoolExecutor(max_workers=self.workers_num) as res_executor:
                 res_futures = []
+                self.logger.debug(f"Spawning {len(self.response_index)} tasks; res_futures is {res_futures}")
+                self.logger.debug(f"Response index: {self.response_index}")
                 for res_i, response_tag in enumerate(self.response_index):
+                    self.logger.debug(
+                        f"Starting processing {response_tag}."
+                    )
                     res_futures.append(
                         res_executor.submit(
                             self.run_comp_process_response_subtask, res_i, response_tag,
-                            microbiome, response, exp_name, total_ocu_num
+                            microbiome, response, exp_name, total_ocu_num,
+                            outlier_detection_step_flag=outlier_detection_step_flag,
+                            outlier_detection_all=outlier_detection_all,
+                            outlier_detection_masked=outlier_detection_masked,
+                            max_ind=n_taxa[response_tag] if n_taxa else None
                         )
                     )
 
                 # Collect results from all futures
                 for res_future in as_completed(res_futures):
-                    res_i, res_tag, pcc_value, rmse_value, m_slope, m_intercept, n_taxa, d_taxa = res_future.result()
-                    pcc[res_i] = abs(pcc_value)
+                    (
+                        res_i, res_tag, pcc_value, rmse_value, m_slope, m_intercept, n_taxa, d_taxa, m_se
+                    ) = res_future.result()
+                    pcc[res_i] = pcc_value
                     rmse[res_i] = rmse_value
                     sl[res_i] = m_slope
                     ic[res_i] = m_intercept
+                    se[res_i] = m_se
                     clustered_ocu_dictionary_enrichment[f"{total_ocu_num} OCUs"]["NUM_OCU"][res_tag] = n_taxa
                     if d_taxa:
                         clustered_ocu_dictionary_enrichment[f"{total_ocu_num} OCUs"]["DEN_OCU"][res_tag] = d_taxa
@@ -580,7 +624,7 @@ class OneCaseCombination:
                     clustered_ocu_dictionary_enrichment[f"{total_ocu_num} OCUs"]["intercept"][res_tag] = m_intercept
         except (BrokenProcessPool, OSError, ValueError):
             raise
-        return total_ocu_num, pcc, rmse, sl, ic, clustered_ocu_dictionary_enrichment
+        return total_ocu_num, pcc, rmse, sl, ic, clustered_ocu_dictionary_enrichment, se
 
     def run_comp_shuffles_process_response_subtask(
             self, response_feature_index: int, response_tag_str: str,
@@ -798,7 +842,7 @@ class OneCaseCombination:
                 # Wait for all futures to complete and collect results
                 for future in as_completed(futures):
                     (
-                        num_of_ocu_s, pcc_list, rmse_list, slope_list, intercept_list, ocu_dictionary_enrichment
+                        num_of_ocu_s, pcc_list, rmse_list, slope_list, intercept_list, ocu_dictionary_enrichment, _
                     ) = future.result()
                     temp_dict[suffix_name][f"{num_of_ocu_s} OCUs"]["pcc"] = pcc_list
                     temp_dict[suffix_name][f"{num_of_ocu_s} OCUs"]["rmse"] = rmse_list
@@ -812,15 +856,20 @@ class OneCaseCombination:
 
         # Update the instance dictionaries after all processes are complete
         ocu_dictionary = load_file('ocu_dictionary.pkl', self.intermediate_results_path)
+        if self.coda_method != "CLR":
+            # Keep only the keys that meet the max OCU number condition for CoDA methods, other than CLR
+            ocu_dictionary = {
+                k: v for k, v in ocu_dictionary.items() if int(k.split(' ')[0]) <= self.ocu_limit
+            }
         for exp_key in temp_dict:
-            if exp_key not in self.resulting_cluster_dict:
-                self.resulting_cluster_dict[exp_key] = {}
+            if exp_key not in self.correlation_coefficient_dict:
+                self.correlation_coefficient_dict[exp_key] = {}
                 self.rmse_dict[exp_key] = {}
                 self.slope_dict[exp_key] = {}
                 self.intercept_dict[exp_key] = {}
             for ocu_key in temp_dict[exp_key]:
                 dir_name = int(ocu_key.split(' ')[0])
-                self.resulting_cluster_dict[exp_key][dir_name] = temp_dict[exp_key][ocu_key]["pcc"]
+                self.correlation_coefficient_dict[exp_key][dir_name] = temp_dict[exp_key][ocu_key]["pcc"]
                 self.rmse_dict[exp_key][dir_name] = temp_dict[exp_key][ocu_key]["rmse"]
                 self.slope_dict[exp_key][dir_name] = temp_dict[exp_key][ocu_key]["slope"]
                 self.intercept_dict[exp_key][dir_name] = temp_dict[exp_key][ocu_key]["intercept"]
@@ -836,11 +885,13 @@ class OneCaseCombination:
         self.mean_rmse_dict = OneCaseCombination.mean_score_over_otu_clustering(self.rmse_dict)
 
         # Save dictionaries as intermediate results to pickle files
-        save_file(self.resulting_cluster_dict, "cluster_dict.pkl", self.intermediate_results_path)
-        save_file(self.rmse_dict, "rmse.pkl", self.intermediate_results_path)
-        save_file(self.slope_dict, "slope.pkl", self.intermediate_results_path)
-        save_file(self.intercept_dict, "intercept.pkl", self.intermediate_results_path)
-        save_file(self.mean_rmse_dict, "mean_rmse.pkl", self.intermediate_results_path)
+        save_file(
+            self.correlation_coefficient_dict, CORRELATION_COEFFICIENT_ARRAYS_FILE_NAME, self.intermediate_results_path
+        )
+        save_file(self.rmse_dict, RMSE_FILE_NAME, self.intermediate_results_path)
+        save_file(self.slope_dict, SLOPE_FILE_NAME, self.intermediate_results_path)
+        save_file(self.intercept_dict, INTERCEPT_FILE_NAME, self.intermediate_results_path)
+        save_file(self.mean_rmse_dict, MEAN_RMSE_FILE_NAME, self.intermediate_results_path)
 
         # Convert the OCU dictionary entries to taxa lists
         for ocu_key in ocu_dictionary:
@@ -852,7 +903,7 @@ class OneCaseCombination:
                         ]['taxa']
 
         # Save the OCU dictionary with enriched taxa lists and clear it from memory
-        save_file(ocu_dictionary, "ocu_dictionary_compores_enriched.pkl", self.intermediate_results_path)
+        save_file(ocu_dictionary, ENRICHED_OCU_DICTIONARY_FILE_NAME, self.intermediate_results_path)
         ocu_dictionary.clear()
         del ocu_dictionary
 
@@ -887,17 +938,17 @@ class OneCaseCombination:
                         os.makedirs(os.path.join(
                             self.intermediate_results_path, f"{batch[0]}-{batch[-1]}"), exist_ok=True
                         )
-                        pcc_shuffle_arrays = self.load_dict("pcc_shuffle_arrays.pkl",
+                        pcc_shuffle_arrays = self.load_dict(CORRELATION_COEFFICIENT_SHUFFLE_ARRAYS_FILE_NAME,
                                                             f"{batch[0]}-{batch[-1]}")
-                        taxa_shuffled_arrays = self.load_dict("taxa_shuffled_arrays.pkl",
+                        taxa_shuffled_arrays = self.load_dict(TAXA_SHUFFLED_ARRAYS_FILE_NAME,
                                                               f"{batch[0]}-{batch[-1]}")
-                        shuffle_median_dict = self.load_dict("shuffle_median.pkl",
+                        shuffle_median_dict = self.load_dict(SHUFFLE_MEDIAN_FILE_NAME,
                                                              f"{batch[0]}-{batch[-1]}")
-                        p_values_bootstrap_dict = self.load_dict("p_values_bootstrap.pkl",
+                        p_values_bootstrap_dict = self.load_dict(BOOTSTRAP_P_VALUE_FILE_NAME,
                                                                  f"{batch[0]}-{batch[-1]}")
-                        p_values_dict = self.load_dict("p_values.pkl",
+                        p_values_dict = self.load_dict(P_VALUES_FILE_NAME,
                                                        f"{batch[0]}-{batch[-1]}")
-                        gev_parameters_dict = self.load_dict("gev_parameters.pkl",
+                        gev_parameters_dict = self.load_dict(GEV_PARAMETERS_FILE_NAME,
                                                              f"{batch[0]}-{batch[-1]}")
                         shuffle_ci_dict = {}
                         for level in CONFIDENCE_LEVELS:
@@ -905,7 +956,7 @@ class OneCaseCombination:
                                 f"shuffle_ci_{level}.pkl", f"{batch[0]}-{batch[-1]}"
                             )
                         ocu_dictionary_shuffle_enrichment = self.load_dict(
-                            "ocu_dictionary.pkl", f"{batch[0]}-{batch[-1]}"
+                            OCU_DICTIONARY_FILE_NAME, f"{batch[0]}-{batch[-1]}"
                         )
                         if suffix_name not in pcc_shuffle_arrays:
                             pcc_shuffle_arrays[suffix_name] = {}
@@ -930,7 +981,7 @@ class OneCaseCombination:
 
                         bound_run_comp_shuffle = partial(
                             self.run_comp_shuffles_process_task,
-                            r_values_array=copy.deepcopy(self.resulting_cluster_dict[suffix_name][num_of_ocu_s]),
+                            r_values_array=copy.deepcopy(self.correlation_coefficient_dict[suffix_name][num_of_ocu_s]),
                             pcc_shuffle_arrays=pcc_shuffle_arrays[suffix_name][num_of_ocu_s],
                             taxa_shuffle_array_tuples=taxa_shuffled_arrays[suffix_name][num_of_ocu_s]
                         )
@@ -962,32 +1013,34 @@ class OneCaseCombination:
                         pcc_shuffle_arrays[suffix_name][num_of_ocu_s] = extend_instance(
                             pcc_shuffle_arrays[suffix_name][num_of_ocu_s], basic_result["pcc_shuffle_arrays"]
                         )
-                        save_file(pcc_shuffle_arrays, "pcc_shuffle_arrays.pkl", ocu_intermediate_path)
+                        save_file(
+                            pcc_shuffle_arrays, CORRELATION_COEFFICIENT_SHUFFLE_ARRAYS_FILE_NAME, ocu_intermediate_path
+                        )
 
                         taxa_shuffled_arrays[suffix_name][num_of_ocu_s] = extend_instance(
                             taxa_shuffled_arrays[suffix_name][num_of_ocu_s],
                             basic_result["taxa_shuffle_array_tuples"]
                         )
-                        save_file(taxa_shuffled_arrays, "taxa_shuffled_arrays.pkl", ocu_intermediate_path)
+                        save_file(taxa_shuffled_arrays, TAXA_SHUFFLED_ARRAYS_FILE_NAME, ocu_intermediate_path)
 
                         shuffle_median_dict[suffix_name][num_of_ocu_s] = extend_instance(
                             shuffle_median_dict[suffix_name][num_of_ocu_s], basic_result["pcc_shuffle_median"]
                         )
-                        save_file(shuffle_median_dict, "shuffle_median.pkl", ocu_intermediate_path)
+                        save_file(shuffle_median_dict, SHUFFLE_MEDIAN_FILE_NAME, ocu_intermediate_path)
 
                         p_values_bootstrap_dict[suffix_name][num_of_ocu_s] = extend_instance(
                             p_values_bootstrap_dict[suffix_name][num_of_ocu_s], basic_result["p_values_bootstrap"]
                         )
-                        save_file(p_values_bootstrap_dict, "p_values_bootstrap.pkl", ocu_intermediate_path)
+                        save_file(p_values_bootstrap_dict, BOOTSTRAP_P_VALUE_FILE_NAME, ocu_intermediate_path)
                         p_values_dict[suffix_name][num_of_ocu_s] = extend_instance(
                             p_values_dict[suffix_name][num_of_ocu_s], basic_result["p_values"]
                         )
-                        save_file(p_values_dict, "p_values.pkl", ocu_intermediate_path)
+                        save_file(p_values_dict, P_VALUES_FILE_NAME, ocu_intermediate_path)
 
                         gev_parameters_dict[suffix_name][num_of_ocu_s] = extend_instance(
                             gev_parameters_dict[suffix_name][num_of_ocu_s], basic_result["gev_parameters"]
                         )
-                        save_file(gev_parameters_dict, "gev_parameters.pkl", ocu_intermediate_path)
+                        save_file(gev_parameters_dict, GEV_PARAMETERS_FILE_NAME, ocu_intermediate_path)
 
                         for level in CONFIDENCE_LEVELS:
                             shuffle_ci_dict[level][suffix_name][num_of_ocu_s] = extend_instance(
@@ -1000,7 +1053,7 @@ class OneCaseCombination:
 
                         save_file(
                             ocu_dictionary_shuffle_enrichment,
-                            "ocu_dictionary_shuffles_enriched.pkl",
+                            SHUFFLES_ENRICHED_OCU_DICTIONARY_FILE_NAME,
                             ocu_intermediate_path
                         )
             except (BrokenProcessPool, OSError, ValueError):
@@ -1038,11 +1091,11 @@ class OneCaseCombination:
     def combine_p_value_ranking(self, shuffling_cycle_number: int) -> None:
         # calculate mean log p-value metric and save the result
         p_val_dict_temp = {}
-        p_values_dict = self.load_dict("p_values.pkl")
+        p_values_dict = self.load_dict(P_VALUES_FILE_NAME)
         for key in p_values_dict:
             p_val_dict_temp[key] = cast_nested_dict_to_array(p_values_dict[key])
         self.mean_log_p_value_dict = OneCaseCombination.mean_log_score_over_otu_clustering(p_val_dict_temp)
-        save_file(self.mean_log_p_value_dict, "mean_log_p_value.pkl", self.intermediate_results_path)
+        save_file(self.mean_log_p_value_dict, MEAN_LOG_P_VALUE_FILE_NAME, self.intermediate_results_path)
 
         # sort responses by mean log p-value metric and save the ranking
         sorted_mean_log_p_value_df = pd.DataFrame(self.mean_log_p_value_dict, index=self.response_index)
@@ -1051,13 +1104,15 @@ class OneCaseCombination:
 
         # add bootstrap p-values to the dataframe
         bootstrap_p_val_dict_temp = {}
-        bootstrap_p_values_dict = self.load_dict("p_values_bootstrap.pkl")
+        bootstrap_p_values_dict = self.load_dict(BOOTSTRAP_P_VALUE_FILE_NAME)
         for key in bootstrap_p_values_dict:
             bootstrap_p_val_dict_temp[key] = cast_nested_dict_to_array(bootstrap_p_values_dict[key])
         bootstrap_mean_log_p_value_dict = OneCaseCombination.mean_log_score_over_otu_clustering(
             bootstrap_p_val_dict_temp
         )
-        save_file(bootstrap_mean_log_p_value_dict, "bootstrap_mean_log_p_value.pkl", self.intermediate_results_path)
+        save_file(
+            bootstrap_mean_log_p_value_dict, BOOTSTRAP_MEAN_LOG_P_VALUE_FILE_NAME, self.intermediate_results_path
+        )
         # concatenate bootstrap p-values to the p-value dataframe by response index
         bootstrap_mean_log_p_value_df = pd.DataFrame(bootstrap_mean_log_p_value_dict, index=self.response_index)
         sorted_mean_log_p_value_df = pd.concat([sorted_mean_log_p_value_df, bootstrap_mean_log_p_value_df], axis=1)
@@ -1065,13 +1120,13 @@ class OneCaseCombination:
         sorted_mean_log_p_value_df.columns = ["gev", "bootstrap"]
 
         sorted_mean_log_p_value_path = str(os.path.join(
-            self.outputs_path, 'compores_response_ranking', sorting_key, self.coda_method
+            self.outputs_path, RESPONSE_RANKING, sorting_key, self.coda_method
         ))
         os.makedirs(sorted_mean_log_p_value_path, exist_ok=True)
         with open(
                 os.path.join(
                     sorted_mean_log_p_value_path,
-                    f"mean_log_p_value_sorted_responses_at_shuffling_cycle_{shuffling_cycle_number}.csv"
+                    f"minus_mean_log_p_value_sorted_responses_at_shuffling_cycle_{shuffling_cycle_number}.csv"
                 ),
                 'w'
         ) as f:
@@ -1110,32 +1165,6 @@ class OneCaseCombination:
         """
         This function runs the analysis over one case combination
         """
-        if self.step == 0:
-            if self.coda_method == 'CLR':
-                preprocessor = Preprocessor(
-                    self.logger,
-                    self.s1,
-                    self.s2,
-                    self.s3,
-                    self.path_to_microbiome,
-                    self.path_to_response,
-                    self.path_to_microbiome_clustering,
-                    self.path_to_prepared_response,
-                    self.path_to_fastspar_res,
-                    self.path_to_fastspar_corr,
-                    self.path_to_fastspar_cov,
-                    self.outputs_path,
-                    self.ocu_clustering_results_path,
-                    self.response_vs_balance_plots_path,
-                    self.ocu_sampling_rate
-                )
-                preprocessor.process()
-                self.imputed_samples_dictionary = preprocessor.get_imputed_samples_dictionary()
-                self.clustered_ocu_dictionary = preprocessor.get_ocu_clustering_dictionary()
-            self._prepare_list_of_ocu_folders_to_run_over()
-            self._prepare_filtered_copy_of_ocu_dictionary_to_enrich()
-            self.update_state('preprocessed', True)
-            self.step += 1
 
         if self.step == 1:
 
@@ -1209,10 +1238,10 @@ class OneCaseCombination:
                 self.update_state('significance_viz', True)
 
         # Bring to the required format the keys in the final shuffle enrichment to the ocu dictionary
-        ocu_dictionary_shuffle_enriched = self.load_dict("ocu_dictionary_shuffles_enriched.pkl")
+        ocu_dictionary_shuffle_enriched = self.load_dict(SHUFFLES_ENRICHED_OCU_DICTIONARY_FILE_NAME)
         ocu_dictionary_shuffle_enriched = {f"{k} OCUs": v for k, v in ocu_dictionary_shuffle_enriched.items()}
         save_file(
-            ocu_dictionary_shuffle_enriched, "ocu_dictionary_shuffles_enriched.pkl", self.intermediate_results_path
+            ocu_dictionary_shuffle_enriched, SHUFFLES_ENRICHED_OCU_DICTIONARY_FILE_NAME, self.intermediate_results_path
         )
 
         # sort responses by mean log p-value metric and send the top results to the logger
@@ -1226,11 +1255,11 @@ class OneCaseCombination:
 
 
 class ComporesMain:
-    def __init__(self, config_file_path: Union[Path, str, AnyStr], ocu_case: int = None):
+    def __init__(self, config_file_path: Union[Path, str, AnyStr], ocu_case: int = None, deduplicate: bool = True):
         self.config_file_path = config_file_path
         self.config_dict = load_configuration(self.config_file_path)
         try:
-            self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], 'logs')
+            self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS)
             os.makedirs(self.log_files_path, exist_ok=True)
         except (ValueError, NotADirectoryError, PermissionError, KeyError, TypeError) as e:
             raise type(e)(f"Check the `PATH_TO_OUTPUTS` parameter value in the config file: {e}")
@@ -1250,11 +1279,22 @@ class ComporesMain:
         self.g1 = self.config_dict["GROUP1"]
         self.g2 = self.config_dict["GROUP2"]
         self.g3 = self.config_dict["GROUP3"]
+        (
+            self.path_to_microbiome, self.path_to_response, self.meta_data, self.ocu_clustering_results_path,
+            self.path_to_sparcckit_res, self.path_to_sparcckit_corr,
+            self.path_to_sparcckit_cov, self.path_to_microbiome_clustering, self.path_to_prepared_response
+        ) = self.set_paths()
+        self.sparcckit_iter = self.config_dict["SPARCCKIT_MAX_ITER"]
+        self.imputed_samples_dictionary = {}
+        self.clustered_ocu_dictionary = {}
         self.n_workers = self.set_n_workers()
         self.combinations_processed = 0
         self.results = {}
         self.plotting_flag = True
         self.ocu_case = ocu_case
+        self.deduplicate = deduplicate
+        self.ocu_limit = int(self.config_dict["MAX_OCU"])
+        self.outlier_removal_flag = self.config_dict["OUTLIERS_REMOVAL"]
 
     @staticmethod
     def _get_total_cpu_count() -> int:
@@ -1340,6 +1380,86 @@ class ComporesMain:
         """
         return self.results
 
+    def set_paths(self) -> tuple:
+        """
+        This function sets the paths to the files that are used by the Preprocessor instance.
+        """
+        s1 = self.g1
+        s2 = self.g2
+        s3 = self.g3
+        path_to_preprocessing_results = str(os.path.join(self.config_dict["PATH_TO_OUTPUTS"], PREPROCESSING_RESULTS))
+        path_to_sparcckit = str(os.path.join(path_to_preprocessing_results, 'sparcckit'))
+        return (
+            os.path.join(self.config_dict["PATH_TO_MICROBIOME"], f"{s1}-{s2}-{s3}.tsv"),
+            os.path.join(self.config_dict["PATH_TO_RESPONSE"], f"{s1}-{s2}.tsv"),
+            os.path.join(self.config_dict["PATH_TO_METADATA"], f"{s1}-{s2}-metadata.tsv"),
+            os.path.join(self.config_dict["PATH_TO_OUTPUTS"], PREPROCESSING_RESULTS, 'microbiome', 'OCUs'),
+            path_to_sparcckit,
+            os.path.join(path_to_sparcckit, f"taxa_correlation_{s1}-{s2}-{s3}.tsv"),
+            os.path.join(path_to_sparcckit, f"taxa_covariance_{s1}-{s2}-{s3}.tsv"),
+            os.path.join(path_to_preprocessing_results, 'microbiome', f"{s1}-{s2}-{s3}.tsv"),
+            os.path.join(path_to_preprocessing_results, 'response', f"{s1}-{s2}.tsv"),
+        )
+
+    def _prepare_list_of_ocu_folders_to_run_over(self, intermediate_results_path):
+        """Prepares a list of OCU folders to run over as resulted at the preprocessing step."""
+        s1 = self.g1
+        s2 = self.g2
+        s3 = self.g3
+        suffix_name = f"{s1}-{s2}-{s3}"
+
+        base_path = str(os.path.join(self.ocu_clustering_results_path, suffix_name))
+        with open(os.path.join(base_path, f'{suffix_name}_ocu_clustering_dictionary.json'), 'r') as f:
+            self.clustered_ocu_dictionary = json.load(f)
+        if self.plotting_flag:
+            sub_folders = [d for d in os.listdir(base_path) if os.path.isdir(os.path.join(base_path, d))]
+            # sort by number value and not lexicographically
+            sub_folders = sorted(sub_folders, key=lambda x: int(x))
+            # from the OTU number down to MIN_OCU_NUM; sample every ocu_sampling_rate folder to dilute calculations
+            sub_folders = sub_folders[::-1]
+        else:
+            sub_folders = [self.ocu_case]
+
+        # check the number of taxa
+
+        if int(sub_folders[0]) > self.ocu_limit:
+            self.logger.warning(
+                f"The number of taxa / OCUs in the microbiome file is {sub_folders[0]}. "
+                f"The `MAX_OCU` parameter is configured to {self.ocu_limit} taxa / OCUs. "
+                f"The analysis for the CLR CoDA method is currently running without limitation; "
+                f"the `MAX_OCU` parameter is applied to the rest of the CoDA methods in the configuration file."
+            )
+        # store the sampled cluster ocu dictionary keys
+        self.sampled_cluster_ocu_dictionary_keys = sub_folders
+        save_file(self.sampled_cluster_ocu_dictionary_keys, SAMPLED_OCU_CASES_FILE_NAME, intermediate_results_path)
+
+    def _prepare_filtered_copy_of_ocu_dictionary_to_enrich(self, intermediate_results_path):
+        """ After the OCU folders are sampled, the function filters the initial OCU dictionary to only include
+        information on the sampled OCUs to enrich it with the results on the calculations down the stream.
+        """
+        selected_keys = [f"{ocu_num} OCUs" for ocu_num in self.sampled_cluster_ocu_dictionary_keys]
+        self.ocu_dictionary = {
+            k: self.clustered_ocu_dictionary[k] for k in selected_keys if k in self.clustered_ocu_dictionary
+        }
+        for key in self.ocu_dictionary:
+            for result_key in ["NUM_OCU", "DEN_OCU", "rho", "rmse"]:
+                self.ocu_dictionary[key][result_key] = {}
+        save_file(self.ocu_dictionary, OCU_DICTIONARY_FILE_NAME, intermediate_results_path)
+
+    def update_state_to_preprocessed(self, value: Any, state: dict, coda_method: str):
+        if f'{self.g1}-{self.g2}-{self.g3}' not in state:
+            state[f'{self.g1}-{self.g2}-{self.g3}'] = {
+                'preprocessed': False,
+                'run_comp': False,
+                'run_comp_shuffle_iter': [],
+                'significance_viz': [],
+                'otu_cumulative_p_value': False
+            }
+
+        state[f'{self.g1}-{self.g2}-{self.g3}']['preprocessed'] = value
+        with open(os.path.join(self.config_dict["PATH_TO_OUTPUTS"], f'state_{coda_method}.json'), 'w') as f:
+            json.dump(state, f, indent=4)
+
     def check_existing_input_paths(self) -> None:
         """
         This function checks if the paths to the input data in the configuration file exist.
@@ -1377,20 +1497,6 @@ class ComporesMain:
                 }
             }
 
-    def fetch_full_target_response_label(self, path_to_outputs, partial_response_tag) -> str | None:
-
-        # Check if 'response_label' is in the response index
-        response_labels = load_file('response_index.pkl', path_to_outputs)
-        # Search for the full response label by substituting the one that starts with the response_label
-        response_label = next(
-            (label for label in response_labels if label.startswith(partial_response_tag)), None
-        )
-        if response_label is None:
-            self.logger.info(f"No label matching {partial_response_tag} found in the response index. Exiting.")
-            sys.exit(1)
-        else:
-            return response_label
-
     @staticmethod
     def fetch_first_response_tag(path_to_ranking, n_shuffle_cycles):
 
@@ -1402,7 +1508,7 @@ class ComporesMain:
 
         return response_tag
 
-    def run(self) -> None:
+    def run(self, only_preprocess_step_flag: bool = False) -> None:  # TODO: check the former name `main`
         """
         This is the main function of the program running calculations over all requested cases.
 
@@ -1413,14 +1519,14 @@ class ComporesMain:
         suffix_name = f'{self.g1}-{self.g2}-{self.g3}'
 
         # Update the logger file handler to a specific case location
-        self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], 'logs', suffix_name)
+        self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS, suffix_name)
         os.makedirs(self.log_files_path, exist_ok=True)
         self.logger_instance.update_logger_file_handler(
             os.path.join(self.log_files_path, 'compores_main.log')
         )
 
         # Update the logger file handler to a specific case location
-        self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], 'logs', suffix_name)
+        self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS, suffix_name)
         os.makedirs(self.log_files_path, exist_ok=True)
         self.logger_instance.update_logger_file_handler(
             os.path.join(self.log_files_path, 'compores_main.log')
@@ -1443,15 +1549,86 @@ class ComporesMain:
             else:
                 run_step = 0
 
+            if run_step == 0:
+                intermediate_results_path = os.path.join(
+                    self.config_dict["PATH_TO_OUTPUTS"], BASIC_RESULTS,
+                    f'{self.g1}-{self.g2}-{self.g3}', balance_method)
+                response_vs_balance_plots_path = os.path.join(
+                    self.config_dict["PATH_TO_OUTPUTS"], PLOT_PATH, RESPONSE_VS_BEST_BALANCE_PATH,
+                    f'{self.g1}-{self.g2}-{self.g3}'
+                )
+                if balance_method == 'CLR':
+                    preprocessor = Preprocessor(
+                        self.logger,
+                        self.g1,
+                        self.g2,
+                        self.g3,
+                        self.path_to_microbiome,
+                        self.path_to_response,
+                        self.path_to_microbiome_clustering,
+                        self.path_to_prepared_response,
+                        self.path_to_sparcckit_res,
+                        self.path_to_sparcckit_corr,
+                        self.path_to_sparcckit_cov,
+                        self.config_dict["PATH_TO_OUTPUTS"],
+                        self.ocu_clustering_results_path,
+                        response_vs_balance_plots_path,
+                        self.balance_methods,
+                        self.sparcckit_iter,
+                        self.ocu_sampling_rate,
+                        deduplicate_flag=self.deduplicate,
+                        regular_run_flag=self.plotting_flag,
+                        outlier_removal_tag=self.outlier_removal_flag,
+                        path_to_metadata=self.meta_data,
+                        config_dict=self.config_dict,
+                    )
+                    try:
+                        preprocessor.process()
+                    except (
+                            MisMatchFiles, NonNumericDataFrameError, NegativeValuesDataFrameError,
+                            EmptyDataFrame, MinDataFrame, DuplicatedIndices, ValueError, OutlierCheckFailed
+                    ) as e:
+                        self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS)
+                        self.logger_instance.update_logger_file_handler(
+                            os.path.join(self.log_files_path, "compores_sessions.log")
+                        )
+                        self.logger.error(f"{e}")
+                        raise
+                    self.imputed_samples_dictionary = preprocessor.get_imputed_samples_dictionary()
+                    self.clustered_ocu_dictionary = preprocessor.get_ocu_clustering_dictionary()
+                self._prepare_list_of_ocu_folders_to_run_over(intermediate_results_path)
+                self._prepare_filtered_copy_of_ocu_dictionary_to_enrich(intermediate_results_path)
+                self.update_state_to_preprocessed(True, current_state, balance_method)
+                run_step += 1
+
+            if only_preprocess_step_flag:
+                if len(self.balance_methods) > 1:
+                    for b_m in self.balance_methods[1:]:
+                        intermediate_results_path = os.path.join(
+                            self.config_dict["PATH_TO_OUTPUTS"],
+                            BASIC_RESULTS, f"{self.g1}-{self.g2}-{self.g3}", b_m,
+                        )
+                        self._prepare_list_of_ocu_folders_to_run_over(intermediate_results_path)
+                        self._prepare_filtered_copy_of_ocu_dictionary_to_enrich(intermediate_results_path)
+                        self.update_state_to_preprocessed(True, current_state, b_m)
+                self.logger.info("Preprocessing step only: exiting before running CoDa analysis.")
+                return
+
             combination = OneCaseCombination(
                 self.logger, self.config_dict, self.plotting_flag, self.g1, self.g2, self.g3, run_step, self.n_workers,
-                balance_method, self.ocu_case
+                balance_method, self.ocu_case, self.deduplicate
             )
             try:
                 combination.run()
+                self.combinations_processed += 1
+                # Return the logger to the original file handler
+                self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS)
+                self.logger_instance.update_logger_file_handler(
+                    os.path.join(self.log_files_path, 'compores_sessions.log'))
+                self.logger.info(f"CompoRes data processing completed; {self.combinations_processed} cases processed.")
             except (BrokenProcessPool, OSError, FileNotFoundError, ValueError) as e:
                 # Return the logger to the session file handler
-                self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], 'logs')
+                self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS)
                 self.logger_instance.update_logger_file_handler(
                     os.path.join(self.log_files_path, 'compores_sessions.log'))
                 self.logger.error(
@@ -1462,88 +1639,103 @@ class ComporesMain:
                     f" some intermediate results might have been lost;"
                     f" re-run the job after investigating the issue and implementing relevant adjustments.")
                 raise
+            except (MisMatchFiles, NonNumericDataFrameError, NegativeValuesDataFrameError,
+                    EmptyDataFrame, MinDataFrame, DuplicatedIndices) as e:
+                self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS)
+                self.logger_instance.update_logger_file_handler(
+                    os.path.join(self.log_files_path, 'compores_sessions.log'))
+                self.logger.error(f"{e}")
+                raise
 
-            self.combinations_processed += 1
-
-        # Return the logger to the original file handler
-        self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], 'logs')
-        self.logger_instance.update_logger_file_handler(os.path.join(self.log_files_path, 'compores_sessions.log'))
-        self.logger.info(f"CompoRes data processing completed; {self.combinations_processed} cases processed.")
-
-    def generate_otu_p_value_summary_data(self, target_response_tag: str | None) -> None:
+    def generate_otu_p_value_summary_data(self, partial_response_label: str | None = None) -> None:
         if self.plotting_flag:
             self.logger.info("Starting OTU-wise cumulative p-value analysis.")
             microbiome_case = f'{self.g1}-{self.g2}-{self.g3}'
 
-            heatmap_object = ComporesClusteredHeatmapCalculations(self.config_dict, self.g1, self.g2, self.g3)
-            if not heatmap_object.state:
+            try:
+                otu_tracing_state, response_label = self._sync_on_otu_tracing_state(partial_response_label)
+            except NoResponseLabelFound as e:
+                self.logger.error(f"{e} Exiting.")
+                sys.exit(1)
+
+            if not otu_tracing_state:
                 for balance_method in self.balance_methods:
-                    path_to_intermediate_results = os.path.join(
-                        self.config_dict["PATH_TO_OUTPUTS"], 'compores_basic_results', microbiome_case,
-                        balance_method
-                    )
-                    response_labels = load_file('response_index.pkl', path_to_intermediate_results)
-                    for response in response_labels:
-                        res_index = response_labels.index(response)
-                        heatmap_object.set_current_response(res_index, response)
-                        try:
-                            heatmap_object.build_otu_p_value_matrix(balance_method)
-                            if balance_method == 'CLR':
-                                self.logger.info(f"Generated an array of OTU-wise cumulative p-value metrics "
-                                                 f"for CLR: {response}.")
-                            elif balance_method == 'pairs':
-                                self.logger.info(
-                                    f"Generated a matrix of OTU-pairwise cumulative p-value metrics for pairs "
-                                    f"balance: {response}.")
-                        except ValueError or FileNotFoundError:
-                            self.logger.error(
-                                "OTU tracing failed: unknown CoDA method or missing file."
-                            )
-                            sys.exit(1)
+                    self.logger.info(f"Performing OTU-wise cumulative p-value analysis for {balance_method}.")
+                    filtered_responses = self._get_response_info(balance_method, microbiome_case, response_label)
+                    tasks = [
+                        (
+                            self.config_dict, self.g1, self.g2, self.g3, balance_method, i, r
+                        ) for i, r in filtered_responses
+                    ]
+                    with ProcessPoolExecutor(max_workers=4) as executor:
+                        futures = {executor.submit(self._process_single_response, *task): task for task in tasks}
+                        for future in as_completed(futures):
+                            task = futures[future]
+                            try:
+                                result = future.result()
+                                self.logger.info(result)
+                            except Exception as e:
+                                self.logger.error(
+                                    f"OTU tracing failed: unknown CoDA method or missing file; {task[6]}: {e}"
+                                )
+                                sys.exit(1)
+                    self._update_otu_tracing_state(balance_method)
+                    self.logger.info(f"Finished OTU cumulative p-value analysis for {balance_method}.")
+            self.logger.info("OTU cumulative p-value analysis completed.")
+        else:
+            self.logger.info(
+                "OTU-wise cumulative p-value analysis has been already performed."
+            )
 
-                if 'pairs' in self.balance_methods:
-                    path_to_response_ranking = os.path.join(
-                        self.config_dict["PATH_TO_OUTPUTS"], 'compores_response_ranking',
-                        microbiome_case, 'pairs'
-                    )
-                    path_to_intermediate_results = os.path.join(
-                        self.config_dict["PATH_TO_OUTPUTS"], 'compores_basic_results',
-                        microbiome_case, 'pairs'
-                    )
-                    response_labels = load_file('response_index.pkl', path_to_intermediate_results)
+    @staticmethod
+    def _process_single_response(
+            config_dict: dict, g1: str, g2: str, g3: str, balance_method: str, res_index: int, res_tag: str
+    ):
+        p_value_object = ComporesClusteredPValueCalculations(config_dict, g1, g2, g3)
+        p_value_object.set_current_response(res_index, res_tag, balance_method)
+        try:
+            p_value_object.build_otu_p_value_matrix(balance_method)
+            p_value_object.prepare_final_otu_tracing_output()
+            if balance_method == 'CLR':
+                return f"Generated a matrix of OTU-wise cumulative p-value metrics for CLR: {res_tag}."
+            elif balance_method == 'pairs':
+                return f"Generated a matrix of OTU-pairwise cumulative p-value metrics for pairs balance: {res_tag}."
 
-                    if target_response_tag:
-                        target_response = self.fetch_full_target_response_label(
-                            path_to_intermediate_results, target_response_tag
-                        )
-                    else:
-                        target_response = self.fetch_first_response_tag(
-                            path_to_response_ranking, self.shuffle_cycles
-                        )
+        except ValueError or FileNotFoundError as e:
+            raise e
 
-                    for response in response_labels:
-                        res_index = response_labels.index(response)
-                        heatmap_object.set_current_response(res_index, response)
-                        otu_pair_p_values = heatmap_object.prepare_final_otu_pair_p_value_matrix()
-                        create_clustered_heatmap(
-                            otu_pair_p_values,
-                            os.path.join(
-                                self.config_dict["PATH_TO_OUTPUTS"], 'plots', 'otu_heatmaps', microbiome_case
-                            ),
-                            microbiome_case,
-                            response, target_response
-                        )
-                        self.logger.info(
-                            f"Created clustered OTU-pairwise cumulative p-value heatmap for {response}."
-                        )
-                    self.logger.info(
-                        "Clustered OTU-pairwise cumulative p-value heatmaps are ready for all responses."
-                    )
-                    heatmap_object.update_otu_cumulative_p_value_analysis_state('pairs', True)
-            else:
-                self.logger.info(
-                    "OTU-wise cumulative p-value analysis has been already performed."
+    def _update_otu_tracing_state(self, balance_method):
+        p_value_object = ComporesClusteredPValueCalculations(self.config_dict, self.g1, self.g2, self.g3)
+        if balance_method == 'CLR':
+            p_value_object.update_otu_cumulative_p_value_analysis_state('CLR', True)
+        elif balance_method == 'pairs':
+            p_value_object.update_otu_cumulative_p_value_analysis_state('pairs', True)
+
+    def _sync_on_otu_tracing_state(self, response_tag_start: str | None = None):
+        p_value_object = ComporesClusteredPValueCalculations(
+            self.config_dict, self.g1, self.g2, self.g3, True, response_tag_start
+        )
+        return p_value_object.state, p_value_object.response_label
+
+    def _get_response_info(self, balance_method, microbiome_case, response_label):
+        path_to_intermediate_results = os.path.join(
+            self.config_dict["PATH_TO_OUTPUTS"], BASIC_RESULTS, microbiome_case,
+            balance_method
+        )
+        try:
+            if response_label is not None:
+                response_label, response_labels = fetch_full_target_response_label(
+                    path_to_intermediate_results, response_label
                 )
+                filtered_responses = [(i, r) for (i, r) in enumerate(response_labels) if r == response_label]
+            else:
+                response_labels = load_file(RESPONSE_INDEX_FILE_NAME, path_to_intermediate_results)
+                filtered_responses = [(i, r) for (i, r) in enumerate(response_labels)]
+            return filtered_responses
+
+        except NoResponseLabelFound as e:
+            self.logger.error(f"{e} Exiting.")
+            sys.exit(1)
 
     def add_synthetic_data_analysis(self, response_label: str | None) -> None:
 
@@ -1552,28 +1744,23 @@ class ComporesMain:
         else:
             self.logger.info("Starting derived synthetic classification power analysis.")
 
-        NUMBER_OF_RESPONSES_TO_GENERATE = 30
-        NUMBER_OF_EXPERIMENT_REPEATS = 15
+        binary_classification_path = f'{SYNTHETIC_DATA_PATH}/analyze_binary_classification'
+        # sys.path.append(SYNTHETIC_DATA_PATH)
+        # sys.path.append(binary_classification_path)
 
-        # Add the paths to sys.path
-        SYNTHETIC_DATA_PATH = 'synthetic_data'
-        BINARY_CLASSIFICATION_PATH = f'{SYNTHETIC_DATA_PATH}/analyze_binary_classification'
-        sys.path.append(SYNTHETIC_DATA_PATH)
-        sys.path.append(BINARY_CLASSIFICATION_PATH)
-
-        AUROC_CURVE_SCRIPT_PATH = f'{BINARY_CLASSIFICATION_PATH}/analyze_results_using_synthetic_data.sh'
+        current_file = os.path.abspath(__file__)
+        current_dir = os.path.join(os.path.dirname(os.path.dirname(current_file)), binary_classification_path)
+        auroc_curve_script_path = os.path.join(current_dir, 'analyze_results_using_synthetic_data.sh')
         # Check if the script path exists
-        if not os.path.exists(AUROC_CURVE_SCRIPT_PATH):
-            self.logger.info(f"Script path does not exist: {AUROC_CURVE_SCRIPT_PATH}. Exiting.")
+        if not os.path.exists(auroc_curve_script_path):
+            self.logger.info(f"Script path does not exist: {auroc_curve_script_path}. Exiting.")
             sys.exit(1)
-
-        SYNTHETIC_ANALYSIS_RESULTS_PATH = 'synthetic_power_analysis'
 
         # Define paths
         path_to_outputs = self.config_dict["PATH_TO_OUTPUTS"]
         directory_to_preprocessed_microbiome = str(os.path.join(path_to_outputs, PREPROCESSING_RESULTS, "microbiome"))
 
-        # TODO consider renaming coda_method (the same as balance_method)
+        # TODO rename coda_method (the term itself means the same as balance_method)
         if 'pairs' in self.balance_methods:
             balance_method = 'pairs'
             coda_method = 'balance'
@@ -1586,21 +1773,31 @@ class ComporesMain:
         microbiome = pd.read_csv(str(microbiome_path), sep='\t', header=0, index_col=0)
         num_otus = microbiome.shape[1]
         sample_size = microbiome.shape[0]
-        response_labels_path = os.path.join(
-            path_to_outputs, 'compores_basic_results', microbiome_case, balance_method
-        )
-        response_ranking_path = os.path.join(
-            path_to_outputs, 'compores_response_ranking', microbiome_case, balance_method
-        )
+        response_labels_path = os.path.join(path_to_outputs, BASIC_RESULTS, microbiome_case, balance_method)
+        response_ranking_path = os.path.join(path_to_outputs, RESPONSE_RANKING, microbiome_case, balance_method)
 
         if response_label:
-            response_label = self.fetch_full_target_response_label(response_labels_path, response_label)
+            try:
+                response_label, _ = fetch_full_target_response_label(response_labels_path, response_label)
+            except NoResponseLabelFound as e:
+                self.logger.error(f"{e} Exiting.")
+                sys.exit(1)
         else:
             response_label = self.fetch_first_response_tag(response_ranking_path, self.shuffle_cycles)
 
         response_data_input, response_label = fetch_synthetic_analysis_input_data(
-            path_to_outputs, microbiome_case, balance_method, response_label
+            path_to_outputs, microbiome_case, balance_method, self.ocu_limit, response_label
         )
+
+        # Check if response_data_input has more than 3 items
+        if len(response_data_input["rmse"]) < 3:
+            self.logger.info(
+                f"Not enough response data points ({len(response_data_input['rmse'])}) for "
+                f"synthetic power analysis for '{response_label}'. Need at least 3. Try re-running `CompoRes` "
+                f"after balancing `TAXA_FILTER` and `OUTLIERS_REMOVAL` parameters. Exiting."
+            )
+            sys.exit(1)
+
         initial_rmse_values = np.round(response_data_input["rmse"], 3)
         response_data_input = deduplicate_synthetic_analysis_input_data(response_data_input)
         rmse_values = response_data_input["rmse"]
@@ -1619,14 +1816,15 @@ class ComporesMain:
         den_ocu_s_str = '"'+';'.join(f'[{",".join(sublist)}]' for sublist in den_ocu_s)+'"'
 
         # Combine the command into a single string and run the script
-        ocu_sampling_rate = self.ocu_sampling_rate
         command = ' '.join([
-            'bash', AUROC_CURVE_SCRIPT_PATH, str(num_otus), str(sample_size),
-            str(NUMBER_OF_RESPONSES_TO_GENERATE), balance_method,  # TODO: fix balance/coda/lr for better readability
-            str(NUMBER_OF_EXPERIMENT_REPEATS), coda_method, str(ocu_sampling_rate), slope_values_str,
+            'bash', auroc_curve_script_path, str(num_otus), str(sample_size),
+            str(NUMBER_OF_RESPONSES_TO_GENERATE), balance_method,  # TODO: fix balance/coda/lr
+            str(NUMBER_OF_EXPERIMENT_REPEATS), coda_method, str(self.ocu_sampling_rate), slope_values_str,
             intercept_values_str, num_ocu_s_str, den_ocu_s_str,
             microbiome_case, microbiome_path, dir_to_save_results, response_noise_values_str, rmse_ocu_number_str,
-            initial_response_values_str, response_label
+            initial_response_values_str, response_label, str(self.config_dict["TAXA_FILTER"]), str(self.sparcckit_iter),
+            str(self.ocu_limit), self.correlation_type, str(self.config_dict["N_SHUFFLES"]), str(self.shuffle_cycles),
+            current_dir
         ])
         # Run the command
         self.logger.info(f"Running command: {command}")

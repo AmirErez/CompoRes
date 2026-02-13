@@ -1,14 +1,10 @@
 # This workflow will check the module called `src` within the `CompoRes` repository
 # for changes, install Python, dependencies, and run lint and tests
 
-name: Test on PR
+name: Slow Tests
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    types: [ opened, synchronize ]
-    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
   test-src:
@@ -60,11 +56,10 @@ jobs:
         run: |
           conda activate compores_env
       - name: Run tests and build coverage file
-        if: env.PROJECT_CHANGED == 'true'
         run: |
           export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src"
           export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src/compores"
-          pytest -m "not slow" --cov-config=.coveragerc --junitxml=pytest.xml \
+          pytest -m slow --cov-config=.coveragerc --junitxml=pytest.xml \
           --cov-report=term-missing:skip-covered \
           --cov src/compores tests/ | tee test_coverage.txt
       - name: Pytest coverage comment

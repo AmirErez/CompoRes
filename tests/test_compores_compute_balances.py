@@ -10,6 +10,12 @@ from src.compores.compores_compute import CompoRes
 class TestComputeFirstBalance:
 
     @pytest.fixture(scope="function")
+    def tmp_log_file(self, tmp_path):
+        log_dir = tmp_path / "test.log"
+        log_dir.mkdir()
+        return str(log_dir)
+
+    @pytest.fixture(scope="function")
     def basic_input_output_data(self):
         input_counts = pd.DataFrame({
             'A': [.3, .285714, .416667, .444444, .441176],
@@ -60,7 +66,7 @@ class TestComputeFirstBalance:
             if file.endswith('.log'):
                 os.remove(file)
 
-    def test_compute_balances_general(self, basic_input_output_data):
+    def test_compute_balances_general(self, basic_input_output_data, tmp_log_file):
 
         input_counts, input_target_variable, expected_dict, expected_balance = basic_input_output_data
 
@@ -72,8 +78,7 @@ class TestComputeFirstBalance:
         for corr_type in correlation_types_to_test:
             for balance_method in balance_methods_to_test:
                 tested_obj = CompoRes(
-                    input_counts, input_target_variable, 3, '', {}, corr_type=corr_type,
-                    balance_method=balance_method
+                    input_counts, input_target_variable, 3, tmp_log_file, {}, balance_method, corr_type=corr_type
                 )
                 actual_result = tested_obj.compute_balances(input_log_counts, input_target_variable)
                 assert actual_result[0] == expected_dict
@@ -81,7 +86,7 @@ class TestComputeFirstBalance:
 
                 tested_obj.cleanup_logger_file_handlers()
 
-    def test_compute_balances_different_corr_types(self, non_trivial_input_output_data):
+    def test_compute_balances_different_corr_types(self, non_trivial_input_output_data, tmp_log_file):
 
         input_counts, input_target_variable, expected_result = non_trivial_input_output_data
 
@@ -93,7 +98,7 @@ class TestComputeFirstBalance:
         for corr_type in correlation_types_to_test:
             for balance_method in balance_methods_to_test:
                 tested_obj = CompoRes(
-                    input_counts, input_target_variable, 3, '', {},
+                    input_counts, input_target_variable, 3, tmp_log_file, {},
                     corr_type=corr_type, balance_method=balance_method
                 )
                 actual_result = tested_obj.compute_balances(input_log_counts, input_target_variable)

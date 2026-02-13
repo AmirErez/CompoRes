@@ -1,10 +1,8 @@
-# test_my_logger.py
-
 import os
 import shutil
 
 import pytest
-from compores.logger_module import CompoResLogger
+from src.compores.logger_module import CompoResLogger
 
 
 @pytest.fixture

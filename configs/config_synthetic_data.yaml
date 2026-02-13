@@ -6,7 +6,7 @@ PROJECT: test
 # Enter the project experiment parameters
 GROUP1: 50otu
 
-GROUP2: 200samples
+GROUP2: 100samples
 
 GROUP3: synthetic
 
@@ -19,14 +19,14 @@ PATH_TO_OUTPUTS: ./artificial_experiment_output
 # Exclude taxa present in less than the specified fraction of samples
 TAXA_FILTER: 0.2
 
-# Flag for removing outliers (experimental, True or False)
+# Flag for removing outliers (experimental, False by default)
 OUTLIERS_REMOVAL: False
 
 # Maximum OTU pairs excluded during correlation estimate improvement (see the SparCC algorithm; Friedman, Alm, 2012)
 SPARCCKIT_MAX_ITER: 1000
 
 # OCU sampling rate (1 - all OCUs are processed; n > 1 - every n-th clustering case starting back from the total OTUs)
-OCU_SAMPLING_RATE: 15
+OCU_SAMPLING_RATE: 1
 
 # Additional Log-Ratio Transformation method applied in CoDA (currently available:"pairs", runs in addition to "CLR")
 CODA_METHOD: pairs

@@ -149,7 +149,7 @@ class TestPrepareResponse:
         with pytest.raises(ValueError) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("invalid_file_type", input_response_file_path)
 
@@ -162,7 +162,7 @@ class TestPrepareResponse:
         with pytest.raises(SystemExit) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, Path("nonexistent_path"),
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("response", Path("nonexistent_path"))
         assert exc_info.type == SystemExit
@@ -179,7 +179,7 @@ class TestPrepareResponse:
         with pytest.raises(NonNumericDataFrameError) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("response", input_response_file_path)
         assert str(exc_info.value) == expected_message
@@ -194,7 +194,7 @@ class TestPrepareResponse:
         with pytest.raises(EmptyDataFrame) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("response", input_response_file_path)
         assert str(exc_info.value) == expected_message
@@ -209,7 +209,7 @@ class TestPrepareResponse:
         with pytest.raises(MinDataFrame) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("response", input_response_file_path)
         assert expected_message in str(exc_info.value)
@@ -228,7 +228,7 @@ class TestPrepareResponse:
         # Call the function on the sample file
         preprocess = Preprocessor(
             logger, '', '', '', input_microbiome_file_path, input_response_file_path, '', expected_output_file_path,
-            '', '', '', '', '', '', 1
+            '', '', '', '', '', '', ['CLR'], 1000, 1
         )
         # Call the function on the sample file
         preprocess.prepare_input("response", input_response_file_path)

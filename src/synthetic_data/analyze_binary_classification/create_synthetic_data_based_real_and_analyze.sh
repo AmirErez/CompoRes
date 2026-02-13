@@ -15,6 +15,12 @@ OCU_SAMPLING_RATE=${13}
 RESPONSE_BASED=${14}
 MICROBIOME_NAME=${15}
 MICROBIOME_FILE_PATH=${16}
+TAXA_FILTER=${17}
+SPARCCKIT_MAX_ITER=${18}
+MAX_OCU=${19}
+CORR_METHOD=${20}
+N_SHUFFLES=${21}
+SHUFFLE_CYCLES=${22}
 
 # Create results folder if it doesn't exist
 mkdir -p "${FOLDER_TO_SAVE}"
@@ -62,19 +68,31 @@ PATH_TO_RESPONSE: $FOLDER_TO_SAVE/response
 PATH_TO_OUTPUTS: $FOLDER_TO_SAVE/compores_output
 PATH_TO_METADATA: $FOLDER_TO_SAVE/metadata
 
+# Exclude taxa present in less than the specified fraction of samples
+TAXA_FILTER: $TAXA_FILTER
+
+# Flag for removing outliers (True or False)
+OUTLIERS_REMOVAL: False
+
+# Fraction of strongest OTU correlations for inference improvement (see the SparCC algorithm; Friedman, Alm (2012))
+SPARCCKIT_MAX_ITER: $SPARCCKIT_MAX_ITER
+
 # OCU sampling rate
 OCU_SAMPLING_RATE: $OCU_SAMPLING_RATE
+
+# OCU limit
+MAX_OCU: $MAX_OCU
 
 # Log-ratio transformation method applied for compositional data analysis (choose one from:"pairs","CLR")
 CODA_METHOD: $coda_method
 
 # Correlation calculation method (choose one from:"spearman","pearson")
-CORR: pearson
+CORR: $CORR_METHOD
 
 # Sample shuffling method ("response" or "microbiome"), number of shuffles per cycle, number of shuffling cycles
 SHUFFLE: microbiome
-N_SHUFFLES: 10
-SHUFFLE_CYCLES: 5
+N_SHUFFLES: $N_SHUFFLES
+SHUFFLE_CYCLES: $SHUFFLE_CYCLES
 
 # Maximum number of workers for parallel processing
 N_WORKERS:
@@ -95,22 +113,21 @@ for treatment_group in "correlated" "uncorrelated"; do
 import sys
 import os
 
-# Print the current working directory
-print("Current working directory:", os.getcwd())
-
-sys.path.append('synthetic_data')  # Adjust this path as necessary
-
 # Debugging information
-print("CALLING GENERATING DATA")
+# print("Current working directory:", os.getcwd())
+# print("CALLING GENERATING DATA")
 
-from generate_synthetic_responses import create_multiple_responses
+from synthetic_data.generate_synthetic_responses import create_multiple_responses
 
-create_multiple_responses(${noise_level_float}, ${slope}, ${intercept}, "${num_ocu_s}", "${den_ocu_s}", "${MICROBIOME_FILE_PATH}",
+create_multiple_responses(float(${noise_level_float}), ${slope}, ${intercept}, "${num_ocu_s}", "${den_ocu_s}", "${MICROBIOME_FILE_PATH}",
                                "${response_file_path}", "${response_name}", "${treatment_group}","${RESPONSE_BASED}", ${NUMBER_OF_RESPONSES})
 EOF
 
     # Update config file for this iteration
     update_config_file "${CONFIG_FILE_PATH}" ${treatment_group} "${g2}" "${g3}" "${CODA_METHOD}"
+
+    PROJECT_ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../" && pwd)
+    export PYTHONPATH=".:${PROJECT_ROOT}:$PYTHONPATH"
 
     # Run the CompoRes script
     python3 -m compores --config "${CONFIG_FILE_PATH}" --no_plotting --ocu_case "${noise_level_ocu_number}"
@@ -121,8 +138,8 @@ done
 # Python script for plotting
 python3 <<EOF
 import sys
-sys.path.append('synthetic_data/analyze_binary_classification')  # Replace with your actual path
-from run_binary_classification_analysis import plot_p_value_frequencies, plot_p_value_boxplot, plot_roc_curve, read_p_values_from_dictionaries
+# sys.path.append('synthetic_data/analyze_binary_classification')  # Replace with your actual path
+from src.synthetic_data.analyze_binary_classification.run_binary_classification_analysis import plot_p_value_frequencies, plot_p_value_boxplot, plot_roc_curve, read_p_values_from_dictionaries
 
 correlated_microbiome_dir_path =  f"${FOLDER_TO_SAVE}/compores_output/compores_basic_results/correlated-${g2}-${g3}/${CODA_METHOD}"
 uncorrelated_microbiome_dir_path = f"${FOLDER_TO_SAVE}/compores_output/compores_basic_results/uncorrelated-${g2}-${g3}/${CODA_METHOD}"

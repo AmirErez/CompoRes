@@ -9,6 +9,12 @@ from src.compores.compores_compute import CompoRes
 class TestCompoResInit:
 
     @pytest.fixture(scope="function")
+    def tmp_log_file(self, tmp_path):
+        log_dir = tmp_path / "test.log"
+        log_dir.mkdir()
+        return str(log_dir)
+
+    @pytest.fixture(scope="function")
     def setup_teardown_norm_non_impute(self):
         data = {'SampleID': ['C10.d4', 'C11.d4', 'C7.d4', 'C8.d4', 'N10.d4'],
                 'f_A_1683': [0.145418, 0.145460, 0.145913, .23, 0.560669],
@@ -31,7 +37,7 @@ class TestCompoResInit:
             if file.endswith('.log'):
                 os.remove(file)
 
-    def test_cmultrepl_non_normalized_input(self, caplog):
+    def test_cmultrepl_non_normalized_input(self, caplog, tmp_log_file):
         # Create a sample DataFrame without zeros
         test_data = {'SampleID': ['C10.d4', 'C11.d4', 'C7.d4', 'C8.d4', 'N10.d4'],
                      'f_A_1683': [1, 3, np.nan, 7, 9],
@@ -51,7 +57,7 @@ class TestCompoResInit:
         exc_message_system_exit_part = "Error creating CompoRes object: "
 
         with pytest.raises(SystemExit) as exc_info:
-            CompoRes(test_df, test_response_series, 3, '', {}, balance_method='CLR')
+            CompoRes(test_df, test_response_series, 3, tmp_log_file, {}, balance_method='CLR')
 
         assert exc_info.type == SystemExit
         assert exc_info.value.code == 1
@@ -63,7 +69,7 @@ class TestCompoResInit:
             if file.endswith('.log'):
                 os.remove(file)
 
-    def test_compores_init_wrong_balance_method(self, setup_teardown_norm_non_impute, caplog):
+    def test_compores_init_wrong_balance_method(self, setup_teardown_norm_non_impute, caplog, tmp_log_file):
         test_df, test_response_series = setup_teardown_norm_non_impute
         tested_balance_method = 'unknown'
         error_msg = f"Invalid method '{tested_balance_method}'. Supported methods: 'pairs', 'CLR'."
@@ -71,7 +77,7 @@ class TestCompoResInit:
 
         with pytest.raises(SystemExit) as exc_info:
             CompoRes(
-                test_df, test_response_series, 3, '', {},
+                test_df, test_response_series, 3, tmp_log_file, {},
                 balance_method=tested_balance_method
             )
 
@@ -79,7 +85,7 @@ class TestCompoResInit:
         assert exc_info.value.code == 1
         assert error_msg in caplog.text
 
-    def test_compores_init_wrong_corr_type(self, setup_teardown_norm_non_impute, caplog):
+    def test_compores_init_wrong_corr_type(self, setup_teardown_norm_non_impute, caplog, tmp_log_file):
         test_df, test_response_series = setup_teardown_norm_non_impute
         tested_corr_type = 'unknown'
         error_msg = f"Invalid correlation type '{tested_corr_type}'. Supported types: 'pearson', 'spearman'."
@@ -87,7 +93,7 @@ class TestCompoResInit:
 
         with pytest.raises(SystemExit) as exc_info:
             CompoRes(
-                test_df, test_response_series, 3, '', {},
+                test_df, test_response_series, 3, tmp_log_file, {},
                 corr_type=tested_corr_type, balance_method='CLR'
             )
 

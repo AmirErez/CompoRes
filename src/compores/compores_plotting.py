@@ -1,11 +1,8 @@
-import json
 import os
 import re
-import seaborn as sns
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-from seaborn.matrix import ClusterGrid
 from matplotlib.ticker import LogLocator, ScalarFormatter, NullFormatter
 
 from .utils import load_file, cast_nested_dict_to_array
@@ -19,7 +16,7 @@ def plot_ocu_best_balance_by_response(
         dir_num: int,
         name: str,
         result: pd.DataFrame,
-        path_to_plotted_result: str,
+        path_to_plotted_result: str | os.PathLike,
         intercept: float,
         slope: float,
         r_value: float
@@ -121,7 +118,7 @@ def plot_correlation_signal_significance_over_ocus(
     :return:
     """
     # load figure input data
-    dictionary = load_file('cluster_dict.pkl', intermediate_folder)
+    dictionary = load_file('correlation_coefficient.pkl', intermediate_folder)
     index_list = load_file('response_index.pkl', intermediate_folder)
 
     try:
@@ -187,10 +184,23 @@ def delete_older_shuffle_files(plot_folder, current_shuffles):
 
 def plot_correlation_signal_significance_to_response(
         balance_method_val, pcc, pcc_ci_25_values, pcc_ci_2_5_values, pcc_ci_75_values, pcc_ci_97_5_values,
-        pcc_median_values, case_key, plot_folder, response_tag, shuffles_per_cycle, shuffling_cycle_counter
+        pcc_median_values, case_key, plot_folder, response_tag, shuffles_per_cycle, shuffling_cycle_counter,
+        mark_negative_pcc: bool = False
 ):
     fig, ax = plt.subplots()
-    ax.plot(pcc.columns, pcc.loc[response_tag, :], marker='.', linestyle='-', color='#c4941d', label=response_tag)
+    pcc_vals = pcc.loc[response_tag, :]
+    pcc_vals_mask = pcc_vals < 0
+    ax.plot(pcc.columns, np.abs(pcc_vals), marker='.', linestyle='-', color='#c4941d', label=response_tag)
+    if pcc_vals_mask.any() and mark_negative_pcc:
+        ax.scatter(
+            pcc.columns[pcc_vals_mask],
+            np.abs(pcc_vals)[pcc_vals_mask],
+            marker="o",
+            edgecolors="#c4941d",
+            facecolors="none",
+            label="correlation coefficient is negative",
+            zorder=5,
+        )
     plot_ci_95 = pcc_ci_2_5_values is not None and pcc_ci_97_5_values is not None
     if pcc_median_values is not None and plot_ci_95:
         # add median and 2.5%-97.5% to the plot
@@ -234,16 +244,16 @@ def plot_correlation_signal_significance_to_response(
     else:
         legend_title = f'Microbiome: {case_key}\nLR transformation: {balance_method_val}'
     ax.set_title(f'{fig_title}\n{legend_title}')
-    # put legend in top left corner
+    # put legend in a top-left corner
     ax.legend(loc='lower right', fontsize=6)
-    ax.set_ylabel(r"Absolute value of Pearson Correlation Coefficient $\rho$", size=10)
+    ax.set_ylabel(r"Absolute value of Correlation Coefficient $\rho$", size=10)
     ax.set_xlabel("# of OCUs", size=10)
-    # change the `x` axis to log scale
+    # change the `x` axis to a log scale
     ax.set_xscale("log")
     # Customize the tick locations and labels
     # Set major ticks at base 10 and common intermediates (10, 20, 50, 100, 200, etc.)
     ax.xaxis.set_major_locator(LogLocator(base=10.0, subs=(1.0, 2.0, 5.0), numticks=10))
-    # Hide minor tick labels (but keep them in grid if needed)
+    # Hide minor tick labels (but keep them in the grid if needed)
     ax.xaxis.set_minor_locator(LogLocator(base=10.0, subs=np.arange(2, 10) * 0.1, numticks=10))
     ax.xaxis.set_minor_formatter(NullFormatter())
     # Use scalar (non-sci) formatting for major ticks
@@ -261,105 +271,3 @@ def plot_correlation_signal_significance_to_response(
     plt.close(fig)
 
     delete_older_shuffle_files(plot_folder, current_shuffles)
-
-
-def create_clustered_heatmap(
-        data: pd.DataFrame, plot_folder: str, case_key: str, response_tag: str, target_response: str
-) -> None:
-
-    file_extension = 'png'
-
-    vmin = data.stack().min()  # Minimum value
-    vmax = data.stack().max()  # Maximum value
-
-    # Perform hierarchical clustering on rows and columns and create a heatmap
-    cluster_map = sns.clustermap(
-        data,
-        metric="euclidean",
-        method="ward",
-        cmap="PuBuGn",
-        vmin=vmin,  # Set minimum value for the color scale
-        vmax=vmax,  # Set maximum value for the color scale
-        row_cluster=True,  # Cluster rows
-        col_cluster=True,  # Cluster columns
-        xticklabels=False,  # Hide x-axis labels
-        yticklabels=True,  # Show y-axis labels
-        figsize=(12, 8)
-    )
-    # Ensure all y-axis labels are aligned with clustered data
-    reordered_labels = [data.index[i] for i in cluster_map.dendrogram_row.reordered_ind]
-    cluster_map.ax_heatmap.set_yticks([i + 0.5 for i in range(len(reordered_labels))])
-    cluster_map.ax_heatmap.set_yticklabels(reordered_labels, rotation=0, fontsize=4)
-    cluster_map.ax_heatmap.yaxis.set_tick_params(
-        labelleft=True, labelright=False, labelrotation=0, pad=2, left=True, right=False,
-        size=50, width=0.2, colors='tab:blue',
-    )
-    cluster_map.fig.suptitle(
-        t=f'OTU Pairwise Significance Over OCU Clustering for {response_tag}', x=0.4, y=1.01, fontsize=10
-    )
-
-    # Save the heatmap to the specified folder
-    os.makedirs(plot_folder, exist_ok=True)
-    if response_tag == target_response:
-        file_extension = 'svg'
-    cluster_map.savefig(
-        os.path.join(
-            plot_folder, f'{case_key}_{response_tag}_clustered_heatmap.{file_extension}'
-        ), format=file_extension, bbox_inches='tight'
-    )
-
-    plt.close(cluster_map.fig)
-
-    # Extract and save clustering information to a JSON file
-    clustering_info = extract_heatmap_clustering_information(cluster_map, data.index.to_list())
-    with open(os.path.join(plot_folder, f'{case_key}_{response_tag}_clustered_heatmap_info.json'), 'w') as json_file:
-        json.dump(clustering_info, json_file, indent=4)
-
-
-def extract_heatmap_clustering_information(cluster_map: ClusterGrid, labels: list) -> dict:
-    """Extracts clustering information from a heatmap generated by a hierarchical clustering algorithm.
-
-    The function processes the ordered indices and linkage matrix and creates a mapping of clusters to their parent
-    clusters, including the distance between clusters, and the number of elements merged at each linkage step.
-
-    :param cluster_map: The ClusterMap object generated by seaborn's clustermap; contains clustering information.
-    :param labels: The list of indices in the data object used to generate the heatmap.
-    :return: A dictionary containing clustering information. Each key corresponds to a cluster index created during
-    the clustering process. The values contain details about the clusters merged, the distance metric for the merge,
-    and the number of elements merged at each step.
-    """
-    clusters = cluster_map.dendrogram_row.reordered_ind
-    linkage = cluster_map.dendrogram_row.linkage.tolist()
-
-    # Group labels by clusters
-    clustering_info = {}
-    for i, cluster in enumerate(clusters):
-        clustering_info[i] = {
-            "cluster index": i,
-            "cluster 1": [labels[cluster]],
-            "cluster 2": None,
-            "distance": None,
-            "number of elements": 1
-        }
-
-    for item in linkage:
-        if item[0] < len(labels):
-            cluster_1 = [labels[int(item[0])]]
-        else:
-            cluster_1 = clustering_info[int(item[0])]["cluster 1"] + clustering_info[int(item[0])]["cluster 2"]
-        if item[1] < len(labels):
-            cluster_2 = [labels[int(item[1])]]
-        else:
-            cluster_2 = clustering_info[int(item[1])]["cluster 1"] + clustering_info[int(item[1])]["cluster 2"]
-        cluster_index = int(linkage.index(item)) + len(labels)
-        heatmap_item = {
-            "cluster index": cluster_index,
-            "cluster 1": cluster_1,
-            "cluster 2": cluster_2,
-            "distance": item[2],
-            "number of elements": int(item[3])
-        }
-        # Add heatmap item to a json object
-        clustering_info[cluster_index] = heatmap_item
-
-    return clustering_info

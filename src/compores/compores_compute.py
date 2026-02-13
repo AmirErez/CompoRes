@@ -83,6 +83,7 @@ class CompoRes:
         :param path_to_logger: Path to the new log file.
         :return: None
         """
+        os.makedirs(os.path.dirname(path_to_logger), exist_ok=True)
         self.logger_instance.update_logger_file_handler(path_to_logger)
 
     def cleanup_logger_file_handlers(self) -> None:
@@ -106,12 +107,14 @@ class CompoRes:
         """
         return self.corr_matrix
 
-    def run_analysis(self) -> None:
+    def run_analysis(self, outlier_detection_step_flag: bool = False, max_ind: str = None) -> None:
         """
         Runs the compositional analysis on the provided data. The method performs zero-replacement, log-transformation,
         and balance calculations based on the selected method and correlation type. The final dictionary with the
         results is constructed and assigned to the class.
 
+        :param outlier_detection_step_flag: A flag to indicate if the current step is part of outlier detection.
+        :param max_ind: Optional; if provided, uses this index directly instead of computing it (only for 'CLR' method).
         :return: None
         """
         num_y = self.y.copy()
@@ -131,11 +134,11 @@ class CompoRes:
         if self.method == 'pairs':
             Tab_var, B = self.compute_balances(logc, num_y)
         else:
-            Tab_var, B = self.compute_clr(logc, num_y)
+            Tab_var, B = self.compute_clr(logc, num_y, max_ind=max_ind)
 
         self.cleanup_logger_file_handlers()
 
-        self.construct_final_dictionary(Tab_var, B)
+        self.construct_final_dictionary(Tab_var, B, outlier_detection_step_flag=outlier_detection_step_flag)
 
         # Release memory
         self.x = None
@@ -249,16 +252,19 @@ class CompoRes:
 
         return Tab_var, B
 
-    def compute_clr(self, log_counts: pd.DataFrame, target_variable: pd.Series) -> tuple[dict, np.ndarray]:
+    def compute_clr(
+            self, log_counts: np.ndarray | pd.DataFrame, target_variable: pd.Series, max_ind: str = None
+    ) -> tuple[dict, np.ndarray]:
         """
         Applies CLR to treat the constant-sum constraint of compositional data and find the taxa amalgamation with the
-        maximum correlation with given target variable (response).
+        maximum correlation with the given target variable (response).
 
         Sources: Greenacre, M. Compositional Data Analysis, 2021, Annual Review of Statistics and Its Application,
         Volume 8, PP 271-299, https://doi.org/10.1146/annurev-statistics-042720-124436.
 
         :param log_counts: preprocessed microbiome DataFrame containing log-transformed counts.
         :param target_variable: target (response) variable.
+        :param max_ind: Optional; if provided, uses this index directly instead of computing it.
         :return: a tuple of a dataframe with derived taxon and balance vector for the maximum correlation balance.
         """
 
@@ -267,11 +273,13 @@ class CompoRes:
         geometric_mean = np.exp(np.mean(log_counts_array, axis=1))
         clr_transformed = np.log(np.exp(log_counts) / geometric_mean[:, np.newaxis])
         # Calculate correlations with target_variable
-        correlations = np.abs(clr_transformed.corrwith(target_variable, method=self.corr))
+        correlations = clr_transformed.corrwith(target_variable, method=self.corr)
+        # correlations = np.abs(clr_transformed.corrwith(target_variable, method=self.corr))
         # save the output matrix for later use
         self.corr_matrix = correlations
-        # Find column name with maximum correlation
-        max_ind = correlations.idxmax()
+        # If max_ind is None, find a column name with maximum correlation
+        if max_ind is None:
+            max_ind = np.abs(correlations).idxmax()
 
         Tab_var = {"NUM": max_ind, "DEN": "CLR"}
 
@@ -306,17 +314,24 @@ class CompoRes:
 
         return num_taxa, den_taxa
 
-    def construct_final_dictionary(self, bal_dictionary: dict, final_bal: np.array) -> None:
+    def construct_final_dictionary(
+            self, bal_dictionary: dict, final_bal: np.array,
+            outlier_detection_step_flag: bool = False
+    ) -> None:
         """Constructs the final dictionary with the results of the compositional analysis and assigns it to the class.
-        :param bal_dictionary: The dictionary with the maximum correlation balance OCU information.
+        :param bal_dictionary: The dictionary with the maximum correlation balances OCU information.
         :param final_bal: The balance vector for the maximum correlation balance.
+        :parameter outlier_detection_step_flag: A flag to indicate if the current step is part of outlier detection.
         :return: None
         """
         # Variables in the NUMERATOR and the DENOMINATOR
         NUM = bal_dictionary["NUM"]
         DEN = bal_dictionary["DEN"]
         samples = self.x.index.values.tolist()
-        imputed = self.map_imputed_samples_to_ocu_log_ratio(NUM, DEN, samples)
+        if not outlier_detection_step_flag:
+            imputed = self.map_imputed_samples_to_ocu_log_ratio(NUM, DEN, samples)
+        else:
+            imputed = [None for _ in range(len(samples))]
         # taxa_lists = self.map_taxa_to_ocu_response_log_ratio_combination(NUM, DEN, samples)
 
         df_dict = {

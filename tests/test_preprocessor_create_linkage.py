@@ -58,11 +58,11 @@ class TestCreateLinkage:
         expected_result = {
             'expected_linkage_matrix': np.array(
                 [
-                    [0.,  1.,  0.3, 2.],
-                    [2., 3.,  0.3, 2.],
-                    [4.,  7.,  0.3, 3.],
-                    [5.,  8.,  0.3, 4.],
-                    [6.,  9.,  0.45499115, 6.]
+                    [0.,  1.,  0.1, 2.],
+                    [2., 3.,  0.1, 2.],
+                    [4.,  7.,  0.1, 3.],
+                    [5.,  8.,  0.1, 4.],
+                    [6.,  9.,  0.3, 6.]
                 ]
             )
         }
@@ -73,21 +73,34 @@ class TestCreateLinkage:
         yield mock_corr_file_path, expected_result
 
     def test_create_linkage(
-            self, tmp_path,
+            self,
             setup_teardown_mock_microbiome_file, setup_teardown_mock_response_file, setup_teardown_mock_corr_file,
             logger_mock
     ):
 
         # Test the create_linkage function
-        fastspar_corr_file, expected_result = setup_teardown_mock_corr_file
+        sparcc_corr_file, expected_result = setup_teardown_mock_corr_file
         preprocessor = Preprocessor(
             logger_mock, '', '', '', setup_teardown_mock_microbiome_file, setup_teardown_mock_response_file, '', '', '',
-            fastspar_corr_file, '', '', '','', 1
+            sparcc_corr_file, '', '', '','', ['CLR'], 10, 1
         )
-        preprocessor.path_to_fastspar_corr = fastspar_corr_file
         preprocessor.create_linkage()
         actual_linkage_matrix = preprocessor.linkage_matrix
-
         assert isinstance(expected_result['expected_linkage_matrix'], np.ndarray)
         assert np.allclose(actual_linkage_matrix, expected_result['expected_linkage_matrix'])
+
+    def test_calculate_max_iterations(
+            self,
+            setup_teardown_mock_microbiome_file, setup_teardown_mock_response_file,
+            logger_mock
+    ):
+        preprocessor = Preprocessor(
+            logger_mock, '', '', '', setup_teardown_mock_microbiome_file, setup_teardown_mock_response_file, '', '', '',
+            '', '', '', '','', ['CLR'], 1000, 1
+        )
+        num_otus_list = [50, 100, 200, 500, 1000, 5000, 10000, 15000]
+        expected_max_iterations_list = [990, 980, 960, 904, 818, 367, 135, 50]
+        for num_otus, max_iter in zip(num_otus_list, expected_max_iterations_list):
+            actual_max_iterations = preprocessor.calculate_max_iterations(num_otus)
+            assert actual_max_iterations == max_iter
 

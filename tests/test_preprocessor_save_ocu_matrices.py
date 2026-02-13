@@ -136,7 +136,8 @@ class TestSaveOcuMatrices:
             self, setup_teardown_mock_params, setup_teardown_save_ocu_matrices, logger_mock, tmp_path
     ):
         logger = logger_mock
-        plot_output_path = f"{tmp_path}/CLR"
+        plot_output_path = tmp_path
+        coda_methods = ['CLR', 'pairs']
         preprocessor = Preprocessor(
             logger, 'Van', 'IP', 'feces',
             tmp_path / "test_microbiome.tsv", tmp_path / "test_response.tsv",
@@ -144,7 +145,7 @@ class TestSaveOcuMatrices:
             '', '', '', '',
             tmp_path,
             tmp_path / 'preprocessing_results/microbiome/OCUs',
-            plot_output_path, 1
+            plot_output_path, coda_methods, 1000, 1
         )
 
         linkage_mock_input = setup_teardown_mock_params
@@ -184,16 +185,18 @@ class TestSaveOcuMatrices:
         assert actual_ocu_matrix_example.columns.tolist() == expected_output['expected_ocu_matrix_df_columns']
 
         # Validate all OCU matrix files (CSV/TSV outputs)
-        for sub_dir in ["3"]:
-            ocu_dir = os.path.join(plot_output_path, sub_dir)
-            csv_files = [f for f in os.listdir(ocu_dir) if f.endswith('.csv')]
-            assert len(csv_files) == 1, f"Expected 1 TSV file in {ocu_dir}, found {len(csv_files)}"
+        for method in coda_methods:
+            for sub_dir in ["3"]:
+                ocu_dir = os.path.join(plot_output_path, method, sub_dir)
+                csv_files = [f for f in os.listdir(ocu_dir) if f.endswith('.csv')]
+                assert len(csv_files) == 1, f"Expected 1 TSV file in {ocu_dir}, found {len(csv_files)}"
 
 
     def test_save_ocu_taxa_map_csv(self, setup_teardown_mock_params, logger_mock, tmp_path):
         """Test to validate the structure and content of OCU CSV files generated in each clustering directory."""
         logger = logger_mock
-        plot_output_path = tmp_path / "CLR"
+        plot_output_path = tmp_path
+        balance_methods_list = ['CLR','pairs']
         preprocessor = Preprocessor(
             logger, 'Van', 'IP', 'feces',
             tmp_path / "test_microbiome.tsv", tmp_path / "test_response.tsv",
@@ -202,28 +205,30 @@ class TestSaveOcuMatrices:
             tmp_path,
             tmp_path / 'preprocessing_results/microbiome/OCUs',
             plot_output_path,
-            1
+            balance_methods_list,
+            .1, 1
         )
 
         linkage_mock_input = setup_teardown_mock_params
         preprocessor.linkage_matrix = linkage_mock_input
         preprocessor.save_ocu_matrices()
+        for method in balance_methods_list:
+            plot_output_path_method = os.path.join(tmp_path, method)
+            for sub_dir in ["3"]:
+                ocu_dir = os.path.join(plot_output_path_method,sub_dir)
+                csv_files = [f for f in os.listdir(ocu_dir) if f.endswith('.csv')]
 
-        for sub_dir in ["3"]:
-            ocu_dir = os.path.join(plot_output_path,sub_dir)
-            csv_files = [f for f in os.listdir(ocu_dir) if f.endswith('.csv')]
+                for csv_file in csv_files:
+                    df_path = os.path.join(ocu_dir, csv_file)
+                    assert os.path.exists(df_path), f"{df_path} does not exist"
 
-            for csv_file in csv_files:
-                df_path = os.path.join(ocu_dir, csv_file)
-                assert os.path.exists(df_path), f"{df_path} does not exist"
+                    df = pd.read_csv(df_path, sep=",")
+                    assert 'OCU' in df.columns, f"'OCU' column missing in {csv_file}"
+                    assert df.shape[0] == int(sub_dir), f"Unexpected number of rows in {csv_file}"
 
-                df = pd.read_csv(df_path, sep=",")
-                assert 'OCU' in df.columns, f"'OCU' column missing in {csv_file}"
-                assert df.shape[0] == int(sub_dir), f"Unexpected number of rows in {csv_file}"
-
-                # Ensure all OCU columns are float and no NaNs
-                for col in df.columns:
-                    if col != 'OCU':
-                        assert df[col].apply(lambda x: isinstance(x, str)).all(), \
-                            f"Non-string values found in column {col} of {csv_file}"
-                        assert not df[col].isna().any(), f"NaNs found in column {col} of {csv_file}"
+                    # Ensure all OCU columns are float and no NaNs
+                    for col in df.columns:
+                        if col != 'OCU':
+                            assert df[col].apply(lambda x: isinstance(x, str)).all(), \
+                                f"Non-string values found in column {col} of {csv_file}"
+                            assert not df[col].isna().any(), f"NaNs found in column {col} of {csv_file}"

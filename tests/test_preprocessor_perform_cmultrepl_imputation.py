@@ -34,7 +34,7 @@ class TestPerformCMultReplImputation:
             logger_mock, '', '', '',
             os.path.join(tmp_path, "test_df.csv"),
             os.path.join(tmp_path, "test_series.csv"),
-            '', '', '', '', '', '', '', '', 1
+            '', '', '', '', '', '', '', '',  ['CLR'], .1, 1
         )
 
         expected_imputed_samples_dict = {'f_A_1683': ['C10.d4', 'C11.d4', 'C7.d4'], 'f_B_1707': ['C10.d4', 'N10.d4']}
@@ -73,7 +73,7 @@ class TestPerformCMultReplImputation:
             logger_mock, '', '', '',
             os.path.join(tmp_path, "test_df.csv"),
             os.path.join(tmp_path, "test_series.csv"),
-            '', '', '', '', '', '', '', '', 1
+            '', '', '', '', '', '', '', '', ['CLR'], .1, 1
         )
 
         # Perform imputation
@@ -94,7 +94,7 @@ class TestPerformCMultReplImputation:
             logger_mock, '', '', '',
             os.path.join(tmp_path, "test_df.csv"),
             os.path.join(tmp_path, "test_series.csv"),
-            '', '', '', '', '', '', '', '', 1
+            '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
         )
 
         tested_method = 'user'
@@ -126,7 +126,7 @@ class TestPerformCMultReplImputation:
             logger_mock, '', '', '',
             os.path.join(tmp_path, "test_df.csv"),
             os.path.join(tmp_path, "test_series.csv"),
-            '', '', '', '', '', '', '', '', 1
+            '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
         )
 
         expected_message = "NaN values not labelled as count zeros were found in the data set"
@@ -147,7 +147,7 @@ class TestPerformCMultReplImputation:
             logger_mock, '', '', '',
             os.path.join(tmp_path, "test_df.csv"),
             os.path.join(tmp_path, "test_series.csv"),
-            '', '', '', '', '', '', '', '', 1
+            '', '', '', '', '', '', '', '', ['CLR', 'pairs'], .1, 1
         )
 
         input_frac = 0.65

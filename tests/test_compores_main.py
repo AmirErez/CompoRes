@@ -21,6 +21,9 @@ class TestComporesMain:
         if os.path.exists("artificial_experiment_output"):
             shutil.rmtree("artificial_experiment_output")
 
+        if os.path.exists("path"):
+            shutil.rmtree("path")
+
     @pytest.fixture(scope="function")
     def setup_teardown_set_paths(self, tmp_path):
         cfg_file = {
@@ -28,7 +31,9 @@ class TestComporesMain:
             "PATH_TO_RESPONSE": os.path.join("path", "to", "response"),
             "PATH_TO_METADATA": os.path.join("path", "to", "metadata"),
             "PATH_TO_OUTPUTS": os.path.join("path", "to", "outputs"),
+            'TAXA_FILTER': 0.2,
             "OCU_SAMPLING_RATE": 10,
+            "MAX_OCU": 500,
             "CODA_METHOD": None,
             "CORR": 'pearson',
             "SHUFFLE": 'response',
@@ -54,8 +59,12 @@ class TestComporesMain:
                 os.path.dirname(__file__), "data", "artificial_experiment_data", "metadata"
             ),
             "PATH_TO_OUTPUTS": os.path.join(tmp_path, "artificial_experiment_output"),
+            'TAXA_FILTER': 0.2,
             'OCU_SAMPLING_RATE': 1,
+            'MAX_OCU': 800,
             "CODA_METHOD": "pairs",
+            "SPARCCKIT_MAX_ITER": 100,
+            "OUTLIERS_REMOVAL": False,
             "CORR": "pearson",
             "SHUFFLE": "microbiome",
             "N_SHUFFLES": 10,
@@ -72,22 +81,33 @@ class TestComporesMain:
 
         yield temp_path
 
+    @pytest.fixture(scope="function")
+    def setup_teardown_get_response_list(self, tmp_path):
+        path = tmp_path / "artificial_experiment_output/compores_basic_results/50otu-200samples-synthetic/pairs/"
+        response_tags = pd.Series(["response_1_full", "response_2_full", "response_22_full"])
+        partial_tag = "response_2", "response_3"
+        expected_tags = ["response_2_full"]
+        expected_index = [1]
+
+        os.makedirs(path, exist_ok=True)
+        response_tags.to_pickle(os.path.join(path, "response_index.pkl"))
+
+        yield path, partial_tag, list(zip(expected_index, expected_tags))
 
     @pytest.fixture(scope="function")
-    def setup_teardown_fetch_full_target_response_label(self, tmp_path):
-        path = tmp_path / 'path/to/output/s1-s2-s3/pairs/'
-        partial_tag = 'response_2', 'response_3'
-        expected_tag = 'response_2_full'
+    def setup_teardown_get_response_list_none(self, tmp_path):
+        path = tmp_path / "artificial_experiment_output/compores_basic_results/50otu-200samples-synthetic/pairs/"
+        partial_tag = None
 
-        response_tags = pd.Series(['response_1_full', 'response_2_full'])
+        response_tags = pd.Series(["response_1_full", "response_2_full", "response_22_full"])
         os.makedirs(path, exist_ok=True)
-        response_tags.to_pickle(os.path.join(path, 'response_index.pkl'))
+        response_tags.to_pickle(os.path.join(path, "response_index.pkl"))
 
-        yield path, partial_tag, expected_tag
+        yield path, partial_tag, list(enumerate(response_tags))
 
     @pytest.fixture(scope="function")
     def setup_teardown_fetch_full_target_response_label_exit(self, tmp_path):
-        path = tmp_path / 'path/to/output/s1-s2-s3/pairs/'
+        path = tmp_path / "artificial_experiment_output/compores_basic_results/50otu-200samples-synthetic/CLR/"
         partial_tag = 'response_3'
 
         response_tags = pd.Series(['response_1_full', 'response_2_full'])
@@ -95,7 +115,6 @@ class TestComporesMain:
         response_tags.to_pickle(os.path.join(path, 'response_index.pkl'))
 
         yield path, partial_tag
-
 
     def test_set_paths(self, logger_mock, setup_teardown_set_paths):
         # Given parameters for set_paths
@@ -107,23 +126,16 @@ class TestComporesMain:
         tested_class.set_paths()
 
         # Expected paths based on the sample parameters
-        expected_fastspar_path = os.path.join("path", "to", "outputs", "preprocessing_results", "fastspar")
         expected_result = (
-            os.path.join("path", "to", "microbiome", "suffix1-suffix2-suffix3.tsv"),
-            os.path.join("path", "to", "response", "suffix1-suffix2.tsv"),
             os.path.join("path", "to", "metadata", "suffix1-suffix2-metadata.tsv"),
-            expected_fastspar_path,
-            os.path.join(expected_fastspar_path, "taxa_correlation_suffix1-suffix2-suffix3.tsv"),
-            os.path.join(expected_fastspar_path, "taxa_covariance_suffix1-suffix2-suffix3.tsv"),
-            os.path.join("path", "to", "outputs", "preprocessing_results", "microbiome", "suffix1-suffix2-suffix3.tsv"),
+            os.path.join("path", "to", "outputs", "preprocessing_results", "microbiome", "OCUs"),
             os.path.join("path", "to", "outputs", "preprocessing_results", "response", "suffix1-suffix2.tsv"),
         )
 
         # Then compare the actual result with the expected result
         assert (
-                   tested_class.path_to_microbiome, tested_class.path_to_response, tested_class.meta_data,
-                   tested_class.path_to_fastspar_res, tested_class.path_to_fastspar_corr,
-                   tested_class.path_to_fastspar_cov, tested_class.path_to_microbiome_clustering,
+                   tested_class.meta_data,
+                   tested_class.ocu_clustering_results_path,
                    tested_class.path_to_prepared_response
                ) == expected_result
 
@@ -216,15 +228,6 @@ class TestComporesMain:
 
         assert are_equal_with_tolerance
 
-    def test_fetch_full_target_response_label(
-            self, setup_teardown_fetch_full_target_response_label, setup_teardown_set_config
-    ):
-        config_path = setup_teardown_set_config
-        response_index_path, partial_tag, expected_tag = setup_teardown_fetch_full_target_response_label
-        compores_main = ComporesMain(config_path)
-        result = compores_main.fetch_full_target_response_label(response_index_path, partial_tag)
-        assert result == expected_tag
-
     def test_fetch_full_target_response_label_exit(
             self, setup_teardown_fetch_full_target_response_label_exit, setup_teardown_set_config
     ):
@@ -234,10 +237,8 @@ class TestComporesMain:
 
         # Catch the exit call
         with pytest.raises(SystemExit) as exc_info:
-            result = compores_main.fetch_full_target_response_label(response_index_path, partial_tag)
-            assert result is None
+            compores_main.generate_otu_p_value_summary_data(partial_tag)
         assert "1" in str(exc_info.value)
-
 
     def test_fetch_first_response_tag(self, monkeypatch, tmp_path):
 
@@ -361,3 +362,18 @@ class TestComporesMain:
         assert saved_dict["V-I-P"][22] == expected_combined_dictionary["V-I-P"][22]
         assert saved_dict["V-I-P"][37] == expected_combined_dictionary["V-I-P"][37]
 
+    def test_get_response_info(self, setup_teardown_set_config, setup_teardown_get_response_list):
+        config_path = setup_teardown_set_config
+        response_index_path, partial_tag, expected_tag_info = setup_teardown_get_response_list
+
+        compores_main = ComporesMain(config_path)
+        result = compores_main._get_response_info('pairs', "50otu-200samples-synthetic", partial_tag)
+        assert result == expected_tag_info
+
+    def test_get_response_info_none(self, setup_teardown_set_config, setup_teardown_get_response_list_none):
+        config_path = setup_teardown_set_config
+        response_index_path, partial_tag, expected_tag_info = setup_teardown_get_response_list_none
+
+        compores_main = ComporesMain(config_path)
+        result = compores_main._get_response_info('pairs', "50otu-200samples-synthetic", partial_tag)
+        assert result == expected_tag_info

@@ -4,7 +4,6 @@ echo "Starting the script..."
 # Define variables
 NUM_OTUS=$1        # Number of OTUs
 NUM_SAMPLES=$2     # Number of individuals (sample size)
-NORMALIZATION_CONSTANT=1000
 NUMBER_OF_RESPONSES=$3
 CODA_METHOD=$4          # Compositional data log-ratio transformation method
 OCU_SAMPLING=$7
@@ -21,6 +20,13 @@ RESPONSE_RMSE_VALUES=(${15})
 RMSE_VALUES_OCU_NUMBER=(${16})
 RESPONSE_INITIAL_RMSE_VALUES=(${17})
 RESPONSE_TAG=${18}
+TAXA_FILTER=${19}
+SPARCCKIT_MAX_ITER=${20}
+MAX_OCU=${21}
+CORR_METHOD=${22}
+N_SHUFFLES=${23}
+SHUFFLE_CYCLES=${24}
+CURRENT_DIR=${25}
 # Set the Internal Field Separator to "-"
 IFS='-' read -ra parts <<< "$MICROBIOME_CASE"
 
@@ -53,13 +59,13 @@ process_combination() {
   FOLDER_TO_SAVE="$DIR_TO_RESULTS/${noise_level_ocu}otus_${NUM_SAMPLES}samples_${noise_level}noise_${NUMBER_OF_RESPONSES}iterations_${CODA_METHOD}_LR_method_${RESPONSE_BASED}_based_realization${r}"
   CONFIG_FILE_PATH="${FOLDER_TO_SAVE}/config.yaml"
 
-  chmod a+x synthetic_data/analyze_binary_classification/create_synthetic_data_based_real_and_analyze.sh
+  chmod a+x "$CURRENT_DIR"/create_synthetic_data_based_real_and_analyze.sh
   noise_level_float=$(echo "$noise_level" | bc -l)
-  synthetic_data/analyze_binary_classification/create_synthetic_data_based_real_and_analyze.sh "${NUM_OTUS}"\
-  "$NORMALIZATION_CONSTANT" "$FOLDER_TO_SAVE" "${CONFIG_FILE_PATH}" "$NUMBER_OF_RESPONSES"\
+  "$CURRENT_DIR/create_synthetic_data_based_real_and_analyze.sh"\
+  "${NUM_OTUS}" "$NORMALIZATION_CONSTANT" "$FOLDER_TO_SAVE" "${CONFIG_FILE_PATH}" "$NUMBER_OF_RESPONSES"\
   "$noise_level_float" "$slope" "$intercept" "$num_ocu_s" "$den_ocu_s" "$noise_level_ocu"\
   "$CODA_METHOD" "${OCU_SAMPLING}" "$RESPONSE_BASED" "$MICROBIOME_CASE"\
-  "$MICROBIOME_FILE_PATH"
+  "$MICROBIOME_FILE_PATH" "$TAXA_FILTER" "$SPARCCKIT_MAX_ITER" "$MAX_OCU" "$CORR_METHOD" "$N_SHUFFLES" "$SHUFFLE_CYCLES"
 }
 
 export -f process_combination
@@ -96,7 +102,7 @@ echo "All combinations of noise levels and realizations processed."
 wait
 
 # Direct execution of the Python script to process the results of the artificial data experiments
-python3 synthetic_data/analyze_binary_classification/process_auroc_results.py --base_dir "$DIR_TO_RESULTS" \
+python3 "$CURRENT_DIR/process_auroc_results.py" --base_dir "$DIR_TO_RESULTS" \
   --noise_level_ocu_numbers "${RMSE_VALUES_OCU_NUMBER[@]}" \
   --realizations "$REALIZATIONS" \
   --num_samples "$NUM_SAMPLES" \

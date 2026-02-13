@@ -8,6 +8,8 @@ import pandas as pd
 import yaml
 from scipy.stats import genextreme
 
+from .exceptions_module import NoResponseLabelFound
+
 
 def load_configuration(cfg_file_path: str) -> dict:
     """This function loads the configuration file"""
@@ -79,8 +81,10 @@ def extend_instance(
 
 def bootstrap_p_value(observed_value, shuffled_values):
     """Calculates bootstrapped p-value with continuity correction for one-tailed test"""
-    non_nan_shuffled_values = shuffled_values[~np.isnan(shuffled_values)]
-    p_value = (np.sum(non_nan_shuffled_values >= observed_value) + 1) / (len(non_nan_shuffled_values) + 1)
+    ov = np.abs(observed_value)
+    sv = np.abs(shuffled_values)
+    non_nan_shuffled_values = sv[~np.isnan(sv)]
+    p_value = (np.sum(non_nan_shuffled_values >= ov) + 1) / (len(non_nan_shuffled_values) + 1)
     return p_value
 
 
@@ -127,12 +131,13 @@ def calculate_root_mean_square_error(x, y, slope, intercept):
 
 
 def fetch_synthetic_analysis_input_data(
-        path_to_outputs: str, microbiome_file_name: str, balance_method: str, response_tag: str | None
+        path_to_outputs: str, microbiome_file_name: str, balance_method: str, ocu_limit: int, response_tag: str | None
 ):
     """Fetches parameters for synthetic data generation: RMSE and fitted model parameters for given response values.
     :param path_to_outputs: The path to CompoRes outputs.
     :param microbiome_file_name: The name of the microbiome file.
     :param balance_method: The compositional data analysis balance method used.
+    :param ocu_limit: The maximum OCU clustering case to consider for the analysis.
     :param response_tag: The response tag for the response to apply synthetic power analysis to.
     """
 
@@ -167,7 +172,14 @@ def fetch_synthetic_analysis_input_data(
     }
 
     i = response_labels.index(response_tag)
-    for ocu_key in rmse_values:
+    ocu_keys = list(rmse_values.keys())
+
+    # Filter `ocu_keys` remove items with RMSE values closer to zero than 1e-6
+    ocu_keys = [ocu_key for ocu_key in ocu_keys if rmse_values[ocu_key][i] > 1e-6]
+
+    if balance_method != "CLR":
+        ocu_keys = [ocu_key for ocu_key in ocu_keys if ocu_key <= ocu_limit]
+    for ocu_key in ocu_keys:
         response_data["rmse"].append(rmse_values[ocu_key][i])
         response_data["slope"].append(slope_values[ocu_key][i])
         response_data["intercept"].append(intercept_values[ocu_key][i])
@@ -179,6 +191,20 @@ def fetch_synthetic_analysis_input_data(
         response_data["ocu_number"].append(ocu_key)
 
     return response_data, response_tag
+
+
+def fetch_full_target_response_label(path_to_outputs, partial_response_tag) -> tuple[str, list[str]]:
+
+    # Check if 'response_label' is in the response index
+    response_labels = load_file('response_index.pkl', path_to_outputs)
+    # Search for the full response label by substituting the one that starts with the response_label
+    response_label = next(
+        (label for label in response_labels if label.startswith(partial_response_tag)), None
+    )
+    if response_label is None:
+        raise NoResponseLabelFound(f"No label matching `{partial_response_tag}` found in the response index.")
+    else:
+        return response_label, response_labels
 
 
 def deduplicate_synthetic_analysis_input_data(input_data_dict: dict) -> dict:
@@ -252,19 +278,22 @@ def gev_p_value(
     :param correction_method: The method to use for p-value correction in case of extreme values; defaults to None.
     :return:
     """
-    gev_parameters = fit_gev_distribution(shuffled_values)
-    estimated_p_value = calculate_p_value_with_gev(observed_value, *gev_parameters)
+    ov = np.abs(observed_value)
+    sv = np.abs(shuffled_values)
+    gev_parameters = fit_gev_distribution(sv)
+    try:
+        estimated_p_value = calculate_p_value_with_gev(ov, *gev_parameters)
+    except ValueError:
+        estimated_p_value = 1e-11
     if estimated_p_value <= 1e-11:
         if correction_method == 'bootstrap':
             # Combined gev bootstrapped estimate with a fallback to weight-adjusted GEV parameters re-estimation
-            estimated_p_value = tail_case_gev_bootstrapped_p_value(observed_value, *gev_parameters)
+            estimated_p_value = tail_case_gev_bootstrapped_p_value(ov, *gev_parameters)
             if estimated_p_value <= 1e-11:
                 # Extreme observation weight adjusted GEV parameters re-estimation
-                estimated_p_value, gev_parameters = tail_case_gev_weight_adjusted_p_value(
-                    observed_value, shuffled_values
-                )
+                estimated_p_value, gev_parameters = tail_case_gev_weight_adjusted_p_value(ov, sv)
         elif correction_method == 'weight':
-            estimated_p_value, gev_parameters = tail_case_gev_weight_adjusted_p_value(observed_value, shuffled_values)
+            estimated_p_value, gev_parameters = tail_case_gev_weight_adjusted_p_value(ov, sv)
         else:
             estimated_p_value = 1e-11
     return estimated_p_value, gev_parameters
@@ -287,12 +316,16 @@ def calculate_p_value_with_gev(observed_value: float, shape: float, loc: float, 
     """
     The p-value is computed as the survival function (1 - CDF) of the GEV distribution.
 
-    :param observed_value: The observation to calculate the p-value for
-    :param shape: The shape parameter of the GEV distribution
-    :param loc: The location parameter of the GEV distribution
-    :param scale: The scale parameter of the GEV distribution
-    :return: The p-value for the observation
+    :param observed_value: The observation to calculate the p-value for.
+    :param shape: The shape parameter of the GEV distribution.
+    :param loc: The location parameter of the GEV distribution.
+    :param scale: The scale parameter of the GEV distribution.
+    :return: The p-value for the observation.
+    :raises ValueError: If the observed value is not between -1 and 1.
     """
+
+    if not (-1 < observed_value < 1):
+        raise ValueError("The observed value must be between -1 and 1.")
     cdf_value = genextreme.cdf(np.arctanh(observed_value), c=shape, loc=loc, scale=scale)
 
     return 1 - cdf_value
@@ -329,7 +362,10 @@ def tail_case_gev_weight_adjusted_p_value(
     """
     # Ref-fit the GEV params with the observed value included with a small weight to account for the extreme magnitude
     gev_parameters = fit_gev_distribution(np.append(basic_array_for_gev_estimate, weight_factor*observed_value))
-    return calculate_p_value_with_gev(observed_value, *gev_parameters), gev_parameters
+    try:
+        return calculate_p_value_with_gev(observed_value, *gev_parameters), gev_parameters
+    except ValueError:
+        return 1e-11, gev_parameters
 
 
 def round_value_to_significant_digits(value: float, sig_digits: int = 3) -> float:
@@ -355,3 +391,15 @@ def round_value_list_to_significant_digits(value_list: list[float], sig_digits: 
     :return: The list of rounded values.
     """
     return [round_value_to_significant_digits(value, sig_digits) for value in value_list]
+
+
+def extract_response_tags(path_to_response_df, path_to_intermediate_results) -> list:
+    """Extracts response feature tags from a DataFrame and saves them to a file."""
+    response = pd.read_csv(path_to_response_df, sep="\t", index_col=0)
+    response_index = [
+        f'response_{i + 1}_{col}' for i, col in enumerate(response.columns)
+    ]
+    response_index = [col.split("\n")[0] for col in response_index]
+    save_file(response_index, "response_index.pkl", path_to_intermediate_results)
+
+    return response_index

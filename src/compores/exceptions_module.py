@@ -1,3 +1,23 @@
+class OutlierCheckFailed(Exception):
+    def __init__(self, message="Outlier check failed."):
+        super().__init__(message)
+
+
+class DuplicatedIndices(Exception):
+    def __init__(self, message="Duplicated sample tag names", file_name=None):
+        if file_name:
+            message = (
+                f"{message}: provide unique sample identifiers in `{file_name}` or add the `--deduplicate True` "
+                "argument to automate deduplication (the first duplicated sample tag will be used)."
+            )
+        super().__init__(message)
+
+
+class NoResponseLabelFound(Exception):
+    def __init__(self, message="No response label found in the response index."):
+        super().__init__(message)
+
+
 class MisMatchFiles(Exception):
     def __init__(self, message="The input files have mismatching rows."):
         super().__init__(message)

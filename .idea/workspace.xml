@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="AutoImportSettings">
+    <option name="autoReloadType" value="SELECTIVE" />
+  </component>
+  <component name="ChangeListManager">
+    <list default="true" id="19df5503-7749-4438-877d-a19bab65ee5d" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/.coveragerc" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitattributes" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.github/workflows/test-on-pr.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/.gitignore" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/CompoRes.iml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/inspectionProfiles/profiles_settings.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/modules.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vcs.xml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/LICENSE" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/configs/config.yaml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/env/compores_env.yml" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/__main__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/compores_compute.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/compores_main.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/compores_otu_heatmaps.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/compores_plotting.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/exceptions_module.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/logger_module.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/preprocessing.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/compores/utils.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/analyze_binary_classification/__init__.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/analyze_binary_classification/analyze_results_using_synthetic_data.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/analyze_binary_classification/create_synthetic_data_based_real_and_analyze.sh" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/analyze_binary_classification/process_auroc_results.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/analyze_binary_classification/run_binary_classification_analysis.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/synthetic_data/generate_synthetic_responses.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/artificial_experiment_data/artificial_experiment_data_metadata.txt" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/artificial_experiment_data/metadata/50otu-200samples-metadata.tsv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/artificial_experiment_data/microbiome/50otu-200samples-synthetic.tsv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/artificial_experiment_data/response/50otu-200samples.tsv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/fastspar_fake_data_cor.tsv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/data/fastspar_fake_data_cov.tsv" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_compute_balances.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_compute_clr.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_compute_init.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_main.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_otu_heatmaps.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_plotting.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_compores_result_dictionary.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_fastspar.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_logger_module.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_preprocessor_check_input_files_for_same_indexes.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_preprocessor_create_linkage.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_preprocessor_perform_cmultrepl_imputation.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_preprocessor_prepare_input_microbiome_case.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_preprocessor_prepare_input_response_case.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_preprocessor_save_ocu_matrices.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_process_auroc_results.py" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/tests/test_utils.py" beforeDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="CopilotPersistence">
+    <persistenceIdMap>
+      <entry key="_D:/GIT/CompoRes" value="39cbsATU8oWAITE41tPagzWekte" />
+    </persistenceIdMap>
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
+  "lastFilter": {
+    "state": "OPEN",
+    "assignee": "Zhenev"
+  }
+}]]></component>
+  <component name="GithubPullRequestsUISettings"><![CDATA[{
+  "selectedUrlAndAccountId": {
+    "url": "https://github.com/AmirErez/CompoRes.git",
+    "accountId": "7a58a9c8-02e0-4d5a-b80f-b745bfba584c"
+  }
+}]]></component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 0
+}]]></component>
+  <component name="ProjectId" id="39cbsATU8oWAITE41tPagzWekte" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.MCP Project settings loaded": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "RunOnceActivity.typescript.service.memoryLimit.init": "true",
+    "SHARE_PROJECT_CONFIGURATION_FILES": "true",
+    "ai.playground.ignore.import.keys.banner.in.settings": "true",
+    "git-widget-placeholder": "main",
+    "node.js.detected.package.eslint": "true",
+    "node.js.detected.package.tslint": "true",
+    "node.js.selected.package.eslint": "(autodetect)",
+    "node.js.selected.package.tslint": "(autodetect)",
+    "nodejs_package_manager_path": "npm",
+    "vue.rearranger.settings.migration": "true"
+  }
+}]]></component>
+  <component name="SharedIndexes">
+    <attachedChunks>
+      <set>
+        <option value="bundled-js-predefined-d6986cc7102b-9b0f141eb926-JavaScript-PY-253.30387.127" />
+        <option value="bundled-python-sdk-3944b0c99280-6d6dccd035ac-com.jetbrains.pycharm.pro.sharedIndexes.bundled-PY-253.30387.127" />
+      </set>
+    </attachedChunks>
+  </component>
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="19df5503-7749-4438-877d-a19bab65ee5d" name="Changes" comment="" />
+      <created>1770998509744</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1770998509744</updated>
+      <workItem from="1770998510993" duration="748000" />
+    </task>
+    <servers />
+  </component>
+  <component name="TypeScriptGeneratedFilesManager">
+    <option name="version" value="3" />
+  </component>
+  <component name="Vcs.Log.Tabs.Properties">
+    <option name="TAB_STATES">
+      <map>
+        <entry key="MAIN">
+          <value>
+            <State>
+              <option name="FILTERS">
+                <map>
+                  <entry key="branch">
+                    <value>
+                      <list>
+                        <option value="main" />
+                      </list>
+                    </value>
+                  </entry>
+                </map>
+              </option>
+            </State>
+          </value>
+        </entry>
+      </map>
+    </option>
+  </component>
+  <component name="github-copilot-workspace">
+    <instructionFileLocations>
+      <option value=".github/instructions" />
+    </instructionFileLocations>
+    <promptFileLocations>
+      <option value=".github/prompts" />
+    </promptFileLocations>
+  </component>
+</project>

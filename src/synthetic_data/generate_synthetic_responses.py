@@ -80,8 +80,8 @@ def create_response_based_data(num, den, noise_level: float, linear_const: float
     derived from microbiome data, depending on the specified correlation type and response basis.
 
 
-    :param num: Index of the numerator taxon.
-    :param den: Index of the denominator taxon.
+    :param num: A list of numerator taxon labels (microbiome column labels).
+    :param den: A list of denominator taxon labels (microbiome column labels).
     :param noise_level: The standard deviation of the Gaussian noise to be added.
     :param linear_const: The linear constant to multiply the balance values by.
     :param intercept_const: The intercept constant to add to the response.

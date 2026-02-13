@@ -8,11 +8,29 @@ import pytest
 from scipy import stats
 
 from src.compores.compores_main import CONFIG_FILE_PATH
-from src.compores.utils import save_file, load_configuration, invert_dict, shuffle_samples, shuffle_sample_values, \
-    calculate_root_mean_square_error, is_considered_imputed_sample, fetch_synthetic_analysis_input_data, \
-    extend_instance, cast_dict_to_array, cast_nested_dict_to_array, deduplicate_synthetic_analysis_input_data, \
-    bootstrap_p_value, fit_gev_distribution, calculate_p_value_with_gev, tail_case_gev_bootstrapped_p_value, \
-    tail_case_gev_weight_adjusted_p_value, gev_p_value
+from src.compores.exceptions_module import NoResponseLabelFound
+from src.compores.utils import (
+    save_file,
+    load_configuration,
+    invert_dict,
+    shuffle_samples,
+    shuffle_sample_values,
+    calculate_root_mean_square_error,
+    is_considered_imputed_sample,
+    fetch_synthetic_analysis_input_data,
+    extend_instance,
+    cast_dict_to_array,
+    cast_nested_dict_to_array,
+    deduplicate_synthetic_analysis_input_data,
+    bootstrap_p_value,
+    fit_gev_distribution,
+    calculate_p_value_with_gev,
+    tail_case_gev_bootstrapped_p_value,
+    tail_case_gev_weight_adjusted_p_value,
+    gev_p_value,
+    fetch_full_target_response_label,
+    extract_response_tags,
+)
 
 
 def is_valid_path(path: str) -> bool:
@@ -56,6 +74,31 @@ class TestUtils:
         expected_array = [True, False, True]
         yield sample_list, input_params, expected_array
 
+    @pytest.fixture(scope="function")
+    def setup_teardown_fetch_full_target_response_label(self, tmp_path):
+        path = tmp_path / 'path/to/output/s1-s2-s3/pairs/'
+        partial_tag = 'response_2'
+        expected_tag = 'response_2_full'
+
+        response_tags = ['response_1_full', 'response_2_full']
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, 'response_index.pkl'), 'wb') as f:
+            pickle.dump(response_tags, f)
+
+        yield path, partial_tag, expected_tag
+
+    @pytest.fixture(scope="function")
+    def setup_teardown_fetch_full_target_response_label_error(self, tmp_path):
+        path = tmp_path / 'path/to/output/s1-s2-s3/pairs/'
+        partial_tag = 'response_3'
+
+        response_tags = ['response_1_full', 'response_2_full']
+        os.makedirs(path, exist_ok=True)
+        with open(os.path.join(path, 'response_index.pkl'), 'wb') as f:
+            pickle.dump(response_tags, f)
+
+        yield path, partial_tag
+
     def test_load_configuration(self, setup_teardown_load_configuration):
         # Replace 'existing_config.yaml' with the path to your existing YAML file
         existing_yaml_path = setup_teardown_load_configuration
@@ -69,7 +112,6 @@ class TestUtils:
         assert isinstance(config["GROUP1"], str)
         assert isinstance(config["GROUP2"], str)
         assert isinstance(config["GROUP3"], str)
-
 
         assert isinstance(config["PATH_TO_MICROBIOME"], str)
         assert is_valid_path(config["PATH_TO_MICROBIOME"])
@@ -166,7 +208,6 @@ class TestUtils:
                 extend_instance(test['d1'], test['d2'])
         assert "No fit between instance types" in str(e.value)
 
-
     def test_extend_instance_with_array(self):
 
         tests = [
@@ -199,7 +240,6 @@ class TestUtils:
         for test in tests:
             result = extend_instance(test['d1'], test['d2'])
             assert result == test['expected']
-
 
     def test_extend_instance_with_nested_array(self):
 
@@ -271,9 +311,9 @@ class TestUtils:
 
         def mock_load_file(file_name, path_to_load_from):
             data = {
-                'rmse.pkl': {'test-micro-biome': {'1': [0.1, 0.2]}},
-                'slope.pkl': {'test-micro-biome': {'1': [1.1, 1.2]}},
-                'intercept.pkl': {'test-micro-biome': {'1': [2.1, 2.2]}},
+                'rmse.pkl': {'test-micro-biome': {1: [0.1, 0.2]}},
+                'slope.pkl': {'test-micro-biome': {1: [1.1, 1.2]}},
+                'intercept.pkl': {'test-micro-biome': {1: [2.1, 2.2]}},
                 'response_index.pkl': ['response1', 'response2'],
                 'ocu_dictionary_compores_enriched.pkl': {'1 OCUs': {
                     'NUM_OCU': {'response1': ['otu_1, otu_3']}, 'DEN_OCU': {'response1': ['otu_2']}}
@@ -287,6 +327,7 @@ class TestUtils:
             path_to_outputs='test/path',
             microbiome_file_name='test-micro-biome',
             balance_method='pairs',
+            ocu_limit=800,
             response_tag='response1'
         )
 
@@ -321,6 +362,7 @@ class TestUtils:
             path_to_outputs='test/path',
             microbiome_file_name='test-micro-biome',
             balance_method='CLR',
+            ocu_limit=800,
             response_tag='response1'
         )
 
@@ -383,16 +425,63 @@ class TestUtils:
                 else:
                     assert np.array_equal(v, expected_output[k])
 
-
     def test_is_considered_imputed_sample(self, setup_teardown_is_considered_imputed_sample):
         sample_list, params, expected_result = setup_teardown_is_considered_imputed_sample
         for i, sample_name in enumerate(sample_list):
             result = is_considered_imputed_sample(sample_name, **params)
             assert result == expected_result[i], f"Failed for sample: {sample_name}"
 
+    def test_fetch_full_target_response_label(self, setup_teardown_fetch_full_target_response_label):
+        response_index_path, partial_tag, expected_tag = setup_teardown_fetch_full_target_response_label
+        result_tag, result_list = fetch_full_target_response_label(response_index_path, partial_tag)
+        assert result_tag == expected_tag
+        assert result_list == ['response_1_full', 'response_2_full']
+
+    def test_fetch_full_target_response_label_error(self, setup_teardown_fetch_full_target_response_label_error):
+        response_index_path, partial_tag = setup_teardown_fetch_full_target_response_label_error
+
+        # Catch the NoResponseLabelFound error
+        with pytest.raises(NoResponseLabelFound) as exc_info:
+            result = fetch_full_target_response_label(response_index_path, partial_tag)
+            assert result is None
+        assert "No label matching" in str(exc_info.value)
+
+    def test_extract_response_tags(self, tmp_path):
+        # Create a temporary response DataFrame
+        response_data = {
+            "response1\n": [1, 2, 3],
+            "response2\nsome_extra": [4, 5, 6],
+            "response3": [7, 8, 9],
+        }
+        response_df = pd.DataFrame(response_data)
+
+        # Save the DataFrame to a temporary file
+        response_file = tmp_path / "test_response.tsv"
+        response_df.to_csv(response_file, sep="\t", index=True)
+
+        # Create a temporary intermediate results directory
+        intermediate_results_dir = tmp_path / "intermediate_results"
+        intermediate_results_dir.mkdir()
+
+        # Call the function
+        result = extract_response_tags(str(response_file), str(intermediate_results_dir))
+
+        # Check the results
+        expected_tags = ["response_1_response1", "response_2_response2", "response_3_response3"]
+        assert result == expected_tags
+
+        # Verify the file was saved
+        saved_file = intermediate_results_dir / "response_index.pkl"
+        assert saved_file.exists()
+
+        # Load and verify the saved content
+        with open(saved_file, "rb") as f:
+            saved_tags = pickle.load(f)
+        assert saved_tags == expected_tags
+
 
 class TestBootstrapPValue:
-    @pytest.fixture
+    @pytest.fixture(scope='class')
     def shuffled_values(self):
         return {
             "standard_case": {

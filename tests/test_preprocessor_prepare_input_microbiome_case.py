@@ -220,7 +220,7 @@ class TestPrepareMicrobiome:
         logger = logger_mock
         with pytest.raises(SystemExit) as exc_info:
             preprocess = Preprocessor(
-                logger, '', '', '', Path("nonexistent_file_path"), '', '', '', '', '', '', '', '', '', 1
+                logger, '', '', '', Path("nonexistent_file_path"), '', '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("microbiome", Path("nonexistent_file_path"))
         assert exc_info.type == SystemExit
@@ -236,7 +236,7 @@ class TestPrepareMicrobiome:
         with pytest.raises(NonNumericDataFrameError) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("microbiome", input_microbiome_file_path)
         assert str(exc_info.value) == expected_message
@@ -250,7 +250,7 @@ class TestPrepareMicrobiome:
         with pytest.raises(NegativeValuesDataFrameError) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("microbiome", input_microbiome_file_path)
         assert str(exc_info.value) == expected_message
@@ -264,7 +264,7 @@ class TestPrepareMicrobiome:
         with pytest.raises(EmptyDataFrame) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("microbiome", input_microbiome_file_path)
         assert str(exc_info.value) == expected_message
@@ -275,7 +275,7 @@ class TestPrepareMicrobiome:
         with pytest.raises(MinDataFrame) as exc_info:
             preprocess = Preprocessor(
                 logger, '', '', '', input_microbiome_file_path, input_response_file_path,
-                '', '', '', '', '', '', '', '', 1
+                '', '', '', '', '', '', '', '', ['CLR'], 1000, 1
             )
             preprocess.prepare_input("microbiome", input_microbiome_file_path)
         assert expected_message in str(exc_info.value)
@@ -289,7 +289,7 @@ class TestPrepareMicrobiome:
 
         preprocess = Preprocessor(
             logger, '', '', '', input_microbiome_file_path, input_response_file_path, expected_output_file_path,
-            '', '', '', '', '', '', '', 1, imputation_flag=False
+            '', '', '', '', '', '', '', ['CLR'], 1000, 1, imputation_flag=False
         )
         # Call the function on the sample file
         preprocess.prepare_input("microbiome", input_microbiome_file_path)
@@ -313,7 +313,7 @@ class TestPrepareMicrobiome:
         input_response_file_path = setup_teardown_response_file
         preprocess = Preprocessor(
             logger, '', '', '', input_microbiome_file_path, input_response_file_path, expected_output_file_path,
-            '', '', '', '', '', '', '', 1, imputation_flag=False
+            '', '', '', '', '', '', '', ['CLR'], 1000, 1, imputation_flag=False
         )
         # Call the function on the sample file
         preprocess.prepare_input("microbiome", input_microbiome_file_path)
@@ -335,7 +335,7 @@ class TestPrepareMicrobiome:
         input_response_file_path = setup_teardown_response_file
         preprocess = Preprocessor(
             logger, '', '', '', input_microbiome_file_path, input_response_file_path, expected_output_file_path,
-            '', '', '', '', '', '', '', 1
+            '', '', '', '', '', '', '', ['CLR'], 1000, 1
         )
         # Call the function on the sample file
         preprocess.prepare_input("microbiome", input_microbiome_file_path)
