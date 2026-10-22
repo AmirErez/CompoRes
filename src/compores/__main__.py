@@ -2,7 +2,17 @@ import argparse
 
 from .compores_main import ComporesMain, CONFIG_FILE_PATH
 
-if __name__ == '__main__':
+
+def str_to_bool(value: str) -> bool:
+    """Parses a command-line boolean; `type=bool` would turn any non-empty string, "False" included, into True."""
+    if value.lower() in ('true', 'yes', '1'):
+        return True
+    if value.lower() in ('false', 'no', '0'):
+        return False
+    raise argparse.ArgumentTypeError(f"expected True or False, got '{value}'")
+
+
+def main():
     parser = argparse.ArgumentParser(description="""`CompoRes` is an algorithmic package designed to analyze
     correlation between changes in the host's microbiota and the host's gene expression. It addresses two
     significant analysis challenges: compositional statistics in the microbiota and multiple hypothesis
@@ -17,16 +27,19 @@ if __name__ == '__main__':
     parser.add_argument(
         '--include_otu_trace_analysis',
         nargs='?',
-        type=bool,
+        type=str_to_bool,
+        const=True,
         default=False,
-        help='True for a run with further OTU p-value tracing and analysis, False without it.'
+        help='Add OTU p-value tracing and analysis after the run (the flag alone, or True/False).'
     )
     parser.add_argument(
         '--include_classification_power_analysis',
         nargs='?',
-        type=bool,
+        type=str_to_bool,
+        const=True,
         default=False,
-        help='True for a run with further derived synthetic response generation and classification, False without it.'
+        help='Add derived synthetic response generation and classification after the run (the flag alone, or '
+             'True/False).'
     )
     parser.add_argument(
         '--response',
@@ -55,9 +68,11 @@ if __name__ == '__main__':
     parser.add_argument(
         '--deduplicate',
         nargs='?',
-        type=bool,
+        type=str_to_bool,
+        const=True,
         default=False,
-        help='If True, deduplicate the input automatically; keeps the first entry if finds duplicated sample tags.'
+        help='Deduplicate the input automatically, keeping the first entry of duplicated sample tags (the flag alone, '
+             'or True/False).'
     )
     args = parser.parse_args()
 
@@ -73,3 +88,7 @@ if __name__ == '__main__':
                 runner.add_synthetic_data_analysis(args.response)
     finally:
         runner.close()
+
+
+if __name__ == '__main__':
+    main()

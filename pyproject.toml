@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "compores"
+version = "0.2.0"
+description = "Compositional analysis of the association between host microbiota and host responses"
+readme = "README.md"
+license-files = ["LICENSE"]
+requires-python = ">=3.10"
+# The tested versions are pinned in env/compores_env.yml; install them with conda/mamba before `pip install -e .`
+dependencies = [
+    "numpy",
+    "pandas",
+    "scipy",
+    "matplotlib",
+    "scikit-learn",
+    "statsmodels",
+    "seaborn",
+    "pyyaml",
+    "numba",
+    "fastparquet",
+]
+
+[project.scripts]
+compores = "compores.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["compores*"]

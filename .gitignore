@@ -127,3 +127,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# CompoRes test run outputs
+artificial_experiment_output*/

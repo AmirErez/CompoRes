@@ -1,0 +1,45 @@
+# Quick version of config_synthetic_data.yaml for a fast test run: fewer OCU cases and shuffles, separate outputs
+
+# Please check the parameters and adjust them according to your circumstances
+
+# Project name
+PROJECT: test
+# ================== Control of the workflow ==================
+# Enter the project experiment parameters
+GROUP1: 50otu
+
+GROUP2: 100samples
+
+GROUP3: synthetic
+
+# Paths to files (relative paths are relative to the folder of this config file)
+PATH_TO_MICROBIOME: ../tests/data/artificial_experiment_data/microbiome
+PATH_TO_RESPONSE: ../tests/data/artificial_experiment_data/response
+PATH_TO_METADATA: ../tests/data/artificial_experiment_data/metadata
+PATH_TO_OUTPUTS: ../artificial_experiment_output_quick
+
+# Exclude taxa present in less than the specified fraction of samples
+TAXA_FILTER: 0.2
+
+# Maximum OTU pairs excluded during correlation estimate improvement (see the SparCC algorithm; Friedman, Alm, 2012)
+SPARCCKIT_MAX_ITER: 1000
+
+# OCU sampling rate (1 - all OCUs are processed; n > 1 - every n-th clustering case starting back from the total OTUs)
+OCU_SAMPLING_RATE: 5
+
+# Additional Log-Ratio Transformation method applied in CoDA (currently available:"pairs", runs in addition to "CLR")
+CODA_METHOD: pairs
+
+# Max OCU number to process (applied only to additional Log-Ratio Transformation method(s), e.g., "pairs")
+MAX_OCU: 800
+
+# Correlation calculation method (choose one from:"spearman","pearson")
+CORR: pearson
+
+# Sample shuffling method ("response" or "microbiome"), number of shuffles per cycle, number of shuffling cycles
+SHUFFLE: microbiome
+N_SHUFFLES: 5
+SHUFFLE_CYCLES: 2
+
+# Maximum number of workers for parallel processing
+N_WORKERS:

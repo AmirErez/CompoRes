@@ -32,9 +32,10 @@ from .exceptions_module import (
 )
 from .logger_module import CompoResLogger
 from .preprocessing import Preprocessor, PREPROCESSING_RESULTS, OUTLIER_DETECTION
-from .utils import load_configuration, save_file, load_file, shuffle_samples, shuffle_sample_values, \
-    calculate_root_mean_square_error, fetch_synthetic_analysis_input_data, bootstrap_p_value, extend_instance, \
-    cast_nested_dict_to_array, deduplicate_synthetic_analysis_input_data, gev_p_value, fetch_full_target_response_label
+from .utils import load_configuration, resolve_configuration_paths, save_file, load_file, shuffle_samples, \
+    shuffle_sample_values, calculate_root_mean_square_error, fetch_synthetic_analysis_input_data, bootstrap_p_value, \
+    extend_instance, cast_nested_dict_to_array, deduplicate_synthetic_analysis_input_data, gev_p_value, \
+    fetch_full_target_response_label
 
 CONFIG_FILE_PATH = os.path.join(os.path.dirname(__file__), "../..", "configs", "config_synthetic_data.yaml")
 
@@ -1258,6 +1259,7 @@ class ComporesMain:
     def __init__(self, config_file_path: Union[Path, str, AnyStr], ocu_case: int = None, deduplicate: bool = True):
         self.config_file_path = config_file_path
         self.config_dict = load_configuration(self.config_file_path)
+        path_resolution_messages = resolve_configuration_paths(self.config_dict, self.config_file_path)
         try:
             self.log_files_path = os.path.join(self.config_dict["PATH_TO_OUTPUTS"], LOGS)
             os.makedirs(self.log_files_path, exist_ok=True)
@@ -1265,6 +1267,8 @@ class ComporesMain:
             raise type(e)(f"Check the `PATH_TO_OUTPUTS` parameter value in the config file: {e}")
         self._initiate_logger(self.log_files_path)
         self.logger = self.logger_instance.get_logger()
+        for message in path_resolution_messages:
+            self.logger.warning(message)
         try:
             self.check_existing_input_paths()
         except FileNotFoundError as e:
@@ -1294,7 +1298,8 @@ class ComporesMain:
         self.ocu_case = ocu_case
         self.deduplicate = deduplicate
         self.ocu_limit = int(self.config_dict["MAX_OCU"])
-        self.outlier_removal_flag = self.config_dict["OUTLIERS_REMOVAL"]
+        # Experimental and undocumented; off unless set in the configuration file
+        self.outlier_removal_flag = self.config_dict.get("OUTLIERS_REMOVAL", False)
 
     @staticmethod
     def _get_total_cpu_count() -> int:
@@ -1794,7 +1799,7 @@ class ComporesMain:
             self.logger.info(
                 f"Not enough response data points ({len(response_data_input['rmse'])}) for "
                 f"synthetic power analysis for '{response_label}'. Need at least 3. Try re-running `CompoRes` "
-                f"after balancing `TAXA_FILTER` and `OUTLIERS_REMOVAL` parameters. Exiting."
+                f"after adjusting the `TAXA_FILTER` parameter. Exiting."
             )
             sys.exit(1)
 
@@ -1832,7 +1837,14 @@ class ComporesMain:
             capture_output_flag = False
         else:
             capture_output_flag = True
-        subprocess.run(command, capture_output=capture_output_flag, text=True, shell=True)
+        result = subprocess.run(command, capture_output=capture_output_flag, text=True, shell=True)
+        if result.returncode != 0:
+            details = f"\n{result.stderr.strip()}" if result.stderr else " See the script output above."
+            self.logger.error(
+                f"Derived synthetic data and classification power analysis failed for '{response_label}' "
+                f"(exit code {result.returncode}).{details} Exiting."
+            )
+            sys.exit(1)
 
         self.logger.info(
                 f"Finished derived synthetic data and classification power analysis run for '{response_label}'."

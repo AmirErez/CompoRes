@@ -23,7 +23,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: [3.10.5,3.10.13]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout code
@@ -34,7 +34,10 @@ jobs:
       - name: Check for changes
         env:
           CONTAINS_PROJECT: ${{ contains(steps.changed-files.outputs.all_changed_files, 'src/') ||
-                              contains(steps.changed-files.outputs.all_changed_files, 'tests/') }}
+                              contains(steps.changed-files.outputs.all_changed_files, 'tests/') ||
+                              contains(steps.changed-files.outputs.all_changed_files, 'configs/') ||
+                              contains(steps.changed-files.outputs.all_changed_files, 'env/') ||
+                              contains(steps.changed-files.outputs.all_changed_files, 'pyproject.toml') }}
         run: |
           echo "PROJECT_CHANGED=$(echo $CONTAINS_PROJECT)" >> $GITHUB_ENV
       - name: Install linter
@@ -59,6 +62,8 @@ jobs:
       - name: Install dependencies
         run: |
           conda activate compores_env
+          pip install -e .
+          compores --help > /dev/null
       - name: Run tests and build coverage file
         if: env.PROJECT_CHANGED == 'true'
         run: |

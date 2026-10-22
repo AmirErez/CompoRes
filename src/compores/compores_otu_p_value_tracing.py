@@ -372,7 +372,9 @@ class ComporesClusteredPValueCalculations:
 
         if traces.columns.equals(traces.index):
             # Correct diagonal to be zeroes
-            np.fill_diagonal(traces.values, 0)
+            traces_values = traces.to_numpy(copy=True)
+            np.fill_diagonal(traces_values, 0)
+            traces = pd.DataFrame(traces_values, index=traces.index, columns=traces.columns)
 
             orig_tag = f'otu_{self.balance_methods[-1]}'
             condensed_tag = f'otu_{self.balance_methods[-1]}_condensed'
@@ -426,7 +428,7 @@ class ComporesClusteredPValueCalculations:
     def normalize_df(normalization_count_df: pd.DataFrame, to_normalize_df: pd.DataFrame):
         mask_df = normalization_count_df != 0
         mask = mask_df.values
-        traces_values = to_normalize_df.values
+        traces_values = to_normalize_df.to_numpy(copy=True)
         traces_values[mask] = traces_values[mask] / normalization_count_df.values[mask]
         to_normalize_df.iloc[:, :] = traces_values
         return to_normalize_df

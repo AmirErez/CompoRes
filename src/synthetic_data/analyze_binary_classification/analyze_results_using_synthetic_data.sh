@@ -77,7 +77,7 @@ MAX_PROCESSES=4
 # Function to manage background jobs
 wait_for_jobs() {
   while [ "$(jobs -rp | wc -l)" -ge "$MAX_PROCESSES" ]; do
-    wait -n  # Wait for any job to finish
+    sleep 1  # Poll rather than `wait -n`, which needs bash >= 4.3 (macOS ships bash 3.2)
   done
 }
 export -f wait_for_jobs

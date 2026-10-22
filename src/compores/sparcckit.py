@@ -54,7 +54,7 @@ class SparccKit:
                 if i in self.current_indices and j in self.current_indices:
                     mask.loc[self.original_labels[i], self.original_labels[j]] = False
                     mask.loc[self.original_labels[j], self.original_labels[i]] = False
-            mask = mask.values
+            mask = mask.to_numpy(copy=True)
             np.fill_diagonal(mask, False)
 
         t = (T * mask).sum(axis=1).values
@@ -78,7 +78,7 @@ class SparccKit:
                     A.loc[self.original_labels[i], self.original_labels[j]] = 0
                     A.loc[self.original_labels[j], self.original_labels[i]] = 0
         # Diagonal A[i, i] should be number of non-excluded links for i
-        A = A.values
+        A = A.to_numpy(copy=True)
         A[np.diag_indices(D)] = np.sum(A, axis=1)
         try:
             omega2 = np.linalg.solve(A, component_vars)

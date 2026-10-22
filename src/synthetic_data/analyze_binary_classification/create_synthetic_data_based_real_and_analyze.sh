@@ -71,9 +71,6 @@ PATH_TO_METADATA: $FOLDER_TO_SAVE/metadata
 # Exclude taxa present in less than the specified fraction of samples
 TAXA_FILTER: $TAXA_FILTER
 
-# Flag for removing outliers (True or False)
-OUTLIERS_REMOVAL: False
-
 # Fraction of strongest OTU correlations for inference improvement (see the SparCC algorithm; Friedman, Alm (2012))
 SPARCCKIT_MAX_ITER: $SPARCCKIT_MAX_ITER
 

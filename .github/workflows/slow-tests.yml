@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: true
       matrix:
-        python-version: [3.10.5,3.10.13]
+        python-version: ["3.12"]
 
     steps:
       - name: Checkout code
@@ -55,6 +55,7 @@ jobs:
       - name: Install dependencies
         run: |
           conda activate compores_env
+          pip install -e .
       - name: Run tests and build coverage file
         run: |
           export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src"

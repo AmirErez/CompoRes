@@ -11,10 +11,47 @@ from scipy.stats import genextreme
 from .exceptions_module import NoResponseLabelFound
 
 
+CONFIG_PATH_KEYS = ("PATH_TO_MICROBIOME", "PATH_TO_RESPONSE", "PATH_TO_METADATA", "PATH_TO_OUTPUTS")
+
+
 def load_configuration(cfg_file_path: str) -> dict:
     """This function loads the configuration file"""
     with open(cfg_file_path, 'r') as config_file:
         return yaml.safe_load(config_file)
+
+
+def resolve_configuration_paths(config: dict, cfg_file_path: str | PathLike) -> list[str]:
+    """Makes the relative paths in the configuration absolute, taking them relative to the configuration file's folder,
+    so that the package can be run from any working directory. For backward compatibility, configuration files whose
+    relative input paths exist only relative to the working directory have all their relative paths, outputs included,
+    taken relative to the working directory, as before.
+
+    :param config: The loaded configuration; its path values are updated in place.
+    :param cfg_file_path: The path to the configuration file.
+    :return: Messages about reading the paths relative to the working directory, for logging.
+    """
+    if not isinstance(config, dict):
+        return []
+    config_dir = os.path.dirname(os.path.abspath(cfg_file_path))
+    # Empty values (e.g., no metadata) and invalid values are left for the downstream checks
+    relative_keys = [
+        key for key in CONFIG_PATH_KEYS
+        if isinstance(config.get(key), str) and config[key] != '' and not os.path.isabs(config[key])
+    ]
+    cwd_relative = any(
+        not os.path.exists(os.path.join(config_dir, config[key])) and os.path.exists(config[key])
+        for key in relative_keys if key != "PATH_TO_OUTPUTS"
+    )
+    base_dir = os.getcwd() if cwd_relative else config_dir
+    for key in relative_keys:
+        config[key] = os.path.normpath(os.path.join(base_dir, config[key]))
+    if cwd_relative:
+        return [
+            f"The relative paths in {cfg_file_path} were found relative to the working directory, {base_dir}, and are "
+            f"read relative to it. Relative paths are now read relative to the config file folder, {config_dir}; "
+            f"update the config file to run it from any directory."
+        ]
+    return []
 
 
 def save_file(dictionary: any, file_name: str, path_to_save: str | PathLike) -> None:
@@ -103,7 +140,7 @@ def shuffle_samples(data: Union[pd.Series, pd.DataFrame]) -> Union[pd.Series, pd
 def shuffle_sample_values(data: pd.DataFrame) -> pd.DataFrame:
     """Shuffles the values for every sample (row)."""
 
-    shuffled_data = data.copy().values
+    shuffled_data = data.to_numpy(copy=True)
 
     def shuffle_and_return(arr):
         np.random.shuffle(arr)

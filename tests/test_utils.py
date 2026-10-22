@@ -12,6 +12,7 @@ from src.compores.exceptions_module import NoResponseLabelFound
 from src.compores.utils import (
     save_file,
     load_configuration,
+    resolve_configuration_paths,
     invert_dict,
     shuffle_samples,
     shuffle_sample_values,
@@ -602,3 +603,36 @@ class TestGevCalculations:
         for correction_method in ['bootstrap', 'weight', None]:
             resulting_p_val, g = gev_p_value(observed_pcc_val, pcc_array_for_gev_estimation, correction_method)
             assert 1e-11 <= resulting_p_val < 1e-10
+
+    def test_resolve_configuration_paths_relative_to_config_file(self, tmp_path, monkeypatch):
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "data" / "microbiome").mkdir(parents=True)
+        (tmp_path / "data" / "response").mkdir()
+        monkeypatch.chdir(tmp_path / "data")
+        config = {
+            "PATH_TO_MICROBIOME": "../data/microbiome",
+            "PATH_TO_RESPONSE": str(tmp_path / "data" / "response"),
+            "PATH_TO_METADATA": "",
+            "PATH_TO_OUTPUTS": "../outputs",
+        }
+        messages = resolve_configuration_paths(config, tmp_path / "configs" / "config.yaml")
+        assert messages == []
+        assert config["PATH_TO_MICROBIOME"] == str(tmp_path / "data" / "microbiome")
+        assert config["PATH_TO_RESPONSE"] == str(tmp_path / "data" / "response")
+        assert config["PATH_TO_METADATA"] == ""
+        assert config["PATH_TO_OUTPUTS"] == str(tmp_path / "outputs")
+
+    def test_resolve_configuration_paths_relative_to_working_directory(self, tmp_path, monkeypatch):
+        (tmp_path / "configs").mkdir()
+        (tmp_path / "work" / "microbiome").mkdir(parents=True)
+        monkeypatch.chdir(tmp_path / "work")
+        config = {"PATH_TO_MICROBIOME": "microbiome", "PATH_TO_OUTPUTS": "outputs"}
+        messages = resolve_configuration_paths(config, tmp_path / "configs" / "config.yaml")
+        assert len(messages) == 1
+        assert config["PATH_TO_MICROBIOME"] == os.path.join(os.getcwd(), "microbiome")
+        assert config["PATH_TO_OUTPUTS"] == os.path.join(os.getcwd(), "outputs")
+
+    def test_resolve_configuration_paths_leaves_invalid_values(self, tmp_path):
+        config = {"PATH_TO_MICROBIOME": None, "PATH_TO_OUTPUTS": 5}
+        assert resolve_configuration_paths(config, tmp_path / "config.yaml") == []
+        assert config == {"PATH_TO_MICROBIOME": None, "PATH_TO_OUTPUTS": 5}

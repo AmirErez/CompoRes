@@ -10,17 +10,14 @@ GROUP2: 200samples
 
 GROUP3: synthetic
 
-# Paths to files
+# Paths to files (relative paths are relative to the folder of this config file)
 PATH_TO_MICROBIOME: ../tests/data/artificial_experiment_data/microbiome
 PATH_TO_RESPONSE: ../tests/data/artificial_experiment_data/response
 PATH_TO_METADATA: ../tests/data/artificial_experiment_data/metadata
-PATH_TO_OUTPUTS: ./artificial_experiment_output
+PATH_TO_OUTPUTS: ../artificial_experiment_output
 
 # Exclude taxa present in less than the specified fraction of samples
 TAXA_FILTER: 0.2
-
-# Flag for removing outliers (experimental, True or False)
-OUTLIERS_REMOVAL: False
 
 # Maximum OTU pairs excluded during correlation estimate improvement (see the SparCC algorithm; Friedman, Alm, 2012)
 SPARCCKIT_MAX_ITER: 1000

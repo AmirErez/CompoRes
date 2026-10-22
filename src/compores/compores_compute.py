@@ -178,11 +178,7 @@ class CompoRes:
         variable_names = log_counts.columns
 
         # Initiate the output matrix
-        balance_correlations_matrix = pd.DataFrame(
-            np.full((num_variables, num_variables), np.nan),
-            columns=variable_names,
-            index=variable_names
-        )
+        balance_correlations = np.full((num_variables, num_variables), np.nan)
 
         def compute_correlation_coefficients(
                 x_array: np.array, y_array: np.array, compute_method: str = self.corr
@@ -229,15 +225,16 @@ class CompoRes:
 
         # Fill the output matrix with the absolute values of the correlations
         positive_mask = correlations > 0
-        balance_correlations_matrix.values[i[positive_mask], j[positive_mask]] = np.abs(correlations[positive_mask])
-        balance_correlations_matrix.values[j[~positive_mask], i[~positive_mask]] = np.abs(correlations[~positive_mask])
+        balance_correlations[i[positive_mask], j[positive_mask]] = np.abs(correlations[positive_mask])
+        balance_correlations[j[~positive_mask], i[~positive_mask]] = np.abs(correlations[~positive_mask])
+        balance_correlations_matrix = pd.DataFrame(balance_correlations, columns=variable_names, index=variable_names)
 
         # save the output matrix for later use
         self.corr_matrix = balance_correlations_matrix
 
         # Find the maximum value in the resulting matrix
         max_mask = balance_correlations_matrix == balance_correlations_matrix.max().max()
-        first_balance_column_names = balance_correlations_matrix[max_mask].stack().index.tolist()[0]
+        first_balance_column_names = balance_correlations_matrix[max_mask].stack().dropna().index.tolist()[0]
 
         first_balance_row_name = first_balance_column_names[0]
         first_balance_col_name = first_balance_column_names[1]
