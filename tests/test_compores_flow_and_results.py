@@ -10,7 +10,8 @@ from src.compores.compores_main import ComporesMain, SYNTHETIC_ANALYSIS_RESULTS_
 from src.compores.preprocessing import MIN_OCU_NUM
 
 TEST_DATA_PATH = "artificial_experiment_data"
-TEST_OUTPUT_PATH = "artificial_experiment_output"
+# Under the tests folder, not the working directory, whose `artificial_experiment_output` may hold the demo results
+TEST_OUTPUT_PATH = os.path.join(os.path.dirname(__file__), "artificial_experiment_output")
 TEST_SAMPLING_RATE = 15
 
 
@@ -18,9 +19,10 @@ class TestCompoResIntegration:
 
     @pytest.fixture(scope="class", autouse=True)
     def cleanup_test_output(self):
+        # Also before the tests, since the state left by an interrupted run would be resumed
+        shutil.rmtree(TEST_OUTPUT_PATH, ignore_errors=True)
         yield
-        if os.path.exists(TEST_OUTPUT_PATH):
-            shutil.rmtree(TEST_OUTPUT_PATH)
+        shutil.rmtree(TEST_OUTPUT_PATH, ignore_errors=True)
 
     @pytest.fixture(scope="function")
     def setup_teardown_compores(self, tmp_path):
@@ -31,7 +33,7 @@ class TestCompoResIntegration:
             "PATH_TO_MICROBIOME": os.path.join(os.path.dirname(__file__), "data", TEST_DATA_PATH, "microbiome"),
             "PATH_TO_RESPONSE": os.path.join(os.path.dirname(__file__), "data", TEST_DATA_PATH, "response"),
             "PATH_TO_METADATA": os.path.join(os.path.dirname(__file__), "data", TEST_DATA_PATH, "metadata"),
-            "PATH_TO_OUTPUTS": os.path.join(os.path.dirname(__file__), TEST_OUTPUT_PATH),
+            "PATH_TO_OUTPUTS": TEST_OUTPUT_PATH,
             'TAXA_FILTER': 0.2,
             'OCU_SAMPLING_RATE': TEST_SAMPLING_RATE,
             'MAX_OCU': 800,

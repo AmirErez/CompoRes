@@ -16,6 +16,8 @@ from statsmodels import robust
 
 from .exceptions_module import MisMatchFiles, NonNumericDataFrameError, NegativeValuesDataFrameError, \
     EmptyDataFrame, MinDataFrame, DuplicatedIndices, OutlierCheckFailed
+from .compores_plotting import plot_taxa_correlation_clustered_heatmap, taxa_correlation_heatmap_path, \
+    MAX_HEATMAP_TAXA
 from .utils import invert_dict, extract_response_tags
 from .sparcckit import SparccKit
 
@@ -196,6 +198,8 @@ class Preprocessor:
                 sys.exit(1)
 
         self.create_linkage()
+        if self.regular_run_flag:
+            self.plot_taxa_correlation_heatmap()
         self.save_ocu_matrices()
 
         self.logger.info("Preprocessing finished.")
@@ -947,6 +951,26 @@ class Preprocessor:
         self.linkage_matrix = linkage_matrix
         message = "Linkage matrix generated."
         self.logger.info(message)
+
+    def plot_taxa_correlation_heatmap(self) -> None:
+        """Plots the SparCC taxon correlations as a heatmap, clustered by the linkage matrix that defines the OCUs. The
+        heatmap is an overview only: a failure to plot it is logged rather than raised."""
+        path_to_plot = taxa_correlation_heatmap_path(self.outputs_path, self.file_name)
+        try:
+            correlations = pd.read_csv(self.path_to_sparcckit_corr, sep="\t", index_col=0)
+            plotted = plot_taxa_correlation_clustered_heatmap(
+                correlations, self.linkage_matrix, self.file_name, path_to_plot
+            )
+        except Exception as e:  # An overview only: never fail the preprocessing because of it
+            self.logger.warning(f"The clustered heatmap of the taxon correlations could not be plotted: {e}")
+            return
+        if plotted:
+            self.logger.info(f"Clustered heatmap of the taxon correlations: {path_to_plot}")
+        else:
+            self.logger.info(
+                f"No clustered heatmap of the taxon correlations: {correlations.shape[0]} taxa are more than the "
+                f"{MAX_HEATMAP_TAXA} that can be plotted."
+            )
 
     def save_ocu_taxa_map_csv(self, file_name: str, cluster_count: int, clustering_dictionary: dict[str:[]]) -> None:
         """Writes the mapping between OCU and the OTU it contains to a `csv` file in corresponding balance plot folders.

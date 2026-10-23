@@ -30,6 +30,7 @@ from .exceptions_module import (
     NoResponseLabelFound,
     OutlierCheckFailed,
 )
+from .compores_report import write_results_report
 from .logger_module import CompoResLogger
 from .preprocessing import Preprocessor, PREPROCESSING_RESULTS, OUTLIER_DETECTION
 from .utils import load_configuration, resolve_configuration_paths, save_file, load_file, shuffle_samples, \
@@ -1651,6 +1652,20 @@ class ComporesMain:
                     os.path.join(self.log_files_path, 'compores_sessions.log'))
                 self.logger.error(f"{e}")
                 raise
+        self.write_report()
+
+    def write_report(self) -> None:
+        """Writes `report.html`, an overview of the results that links to the result files, to the output folder;
+        skipped when plotting is switched off, as for the runs of the synthetic power analysis."""
+        if not self.plotting_flag:
+            return
+        try:
+            report_path = write_results_report(self.config_dict["PATH_TO_OUTPUTS"])
+        except Exception as e:  # The report is an overview only: never fail the analysis because of it
+            self.logger.warning(f"The results report could not be written: {e}")
+            return
+        if report_path:
+            self.logger.info(f"Results report: {report_path}")
 
     def generate_otu_p_value_summary_data(self, partial_response_label: str | None = None) -> None:
         if self.plotting_flag:
@@ -1687,6 +1702,7 @@ class ComporesMain:
                     self._update_otu_tracing_state(balance_method)
                     self.logger.info(f"Finished OTU cumulative p-value analysis for {balance_method}.")
             self.logger.info("OTU cumulative p-value analysis completed.")
+            self.write_report()
         else:
             self.logger.info(
                 "OTU-wise cumulative p-value analysis has been already performed."
@@ -1849,3 +1865,4 @@ class ComporesMain:
         self.logger.info(
                 f"Finished derived synthetic data and classification power analysis run for '{response_label}'."
             )
+        self.write_report()

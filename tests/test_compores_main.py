@@ -18,9 +18,6 @@ class TestComporesMain:
 
         yield logger
 
-        if os.path.exists("artificial_experiment_output"):
-            shutil.rmtree("artificial_experiment_output")
-
         if os.path.exists("path"):
             shutil.rmtree("path")
 

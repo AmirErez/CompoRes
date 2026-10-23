@@ -1,6 +1,13 @@
 import os
 
-from src.compores.compores_plotting import delete_older_shuffle_files
+import numpy as np
+import pandas as pd
+from scipy.cluster.hierarchy import linkage
+from scipy.spatial.distance import squareform
+
+from src.compores import compores_plotting
+from src.compores.compores_plotting import delete_older_shuffle_files, plot_taxa_correlation_clustered_heatmap, \
+    taxa_correlation_heatmap_path
 
 
 class TestComporesPlotting:
@@ -32,3 +39,24 @@ class TestComporesPlotting:
         assert "plot_7_shuffles.png" not in os.listdir(tmp_dir)
         assert "plot_10_shuffles.png" in os.listdir(tmp_dir)
         assert "plot_15.png" in os.listdir(tmp_dir)
+
+    @staticmethod
+    def correlations_and_linkage(n_taxa):
+        values = np.corrcoef(np.random.default_rng(0).normal(size=(30, n_taxa)), rowvar=False)
+        values = (values + values.T) / 2
+        taxa = [f"OTU_{i}" for i in range(n_taxa)]
+        correlations = pd.DataFrame(values, index=taxa, columns=taxa)
+        distances = np.clip(0.5 * (1 - values), 0, None)
+        np.fill_diagonal(distances, 0)
+        return correlations, linkage(squareform(distances), method="average")
+
+    def test_plot_taxa_correlation_clustered_heatmap(self, tmp_path):
+        path_to_plot = taxa_correlation_heatmap_path(tmp_path, "a-b-c")
+        assert plot_taxa_correlation_clustered_heatmap(*self.correlations_and_linkage(8), "a-b-c", path_to_plot)
+        assert os.path.getsize(path_to_plot) > 0
+
+    def test_no_heatmap_of_too_many_taxa(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(compores_plotting, "MAX_HEATMAP_TAXA", 5)
+        path_to_plot = taxa_correlation_heatmap_path(tmp_path, "a-b-c")
+        assert not plot_taxa_correlation_clustered_heatmap(*self.correlations_and_linkage(8), "a-b-c", path_to_plot)
+        assert not os.path.exists(path_to_plot)

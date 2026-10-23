@@ -133,7 +133,7 @@ def plot_auroc_vs_noise(auroc_values_dict: dict, realizations: int, response_bas
         values = [float(noise) for noise in response_rmse_values]
 
         # Create a twin y-axis to preserve the y-axis of the line plot
-        ax2.boxplot(values, vert=False, boxprops=dict(color='blue'),
+        ax2.boxplot(values, orientation='horizontal', boxprops=dict(color='blue'),
                     whiskerprops=dict(color='blue'),
                     capprops=dict(color='blue'),
                     medianprops=dict(color='red'))

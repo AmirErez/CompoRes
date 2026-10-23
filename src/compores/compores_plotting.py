@@ -3,10 +3,16 @@ import re
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import seaborn as sns
 from matplotlib.ticker import LogLocator, ScalarFormatter, NullFormatter
 
 from .utils import load_file, cast_nested_dict_to_array
 from matplotlib.lines import Line2D
+
+TAXA_CORRELATION_PLOT_PATH = os.path.join('plots', 'taxa_correlation_clustering')
+# Larger heatmaps take too long and too much memory to draw, and show no more detail than the screen can
+MAX_HEATMAP_TAXA = 1000
+MAX_LABELED_HEATMAP_TAXA = 100
 
 
 def plot_ocu_best_balance_by_response(
@@ -271,3 +277,50 @@ def plot_correlation_signal_significance_to_response(
     plt.close(fig)
 
     delete_older_shuffle_files(plot_folder, current_shuffles)
+
+
+def taxa_correlation_heatmap_path(path_to_outputs: str | os.PathLike, case_key: str) -> str:
+    """Returns the path to the clustered heatmap of the taxon correlations of an experiment."""
+    return os.path.join(
+        path_to_outputs, TAXA_CORRELATION_PLOT_PATH, case_key, f"{case_key}_taxa_correlation_clustered_heatmap.png"
+    )
+
+
+def plot_taxa_correlation_clustered_heatmap(
+        correlations: pd.DataFrame, linkage_matrix: np.ndarray, case_key: str, path_to_plot: str | os.PathLike
+) -> bool:
+    """
+    Heatmap of the taxon correlations, with the taxa ordered, and the dendrogram drawn, by the hierarchical clustering
+    that defines the OCUs.
+    :param correlations: the SparCC correlations of the taxa, a square data frame
+    :param linkage_matrix: the linkage matrix of the hierarchical clustering of the taxa
+    :param case_key: the experiment, for the title
+    :param path_to_plot: the path to save the figure to
+    :return: False if there are too many taxa to plot, more than `MAX_HEATMAP_TAXA`, True otherwise
+    """
+    n_taxa = correlations.shape[0]
+    if n_taxa > MAX_HEATMAP_TAXA:
+        return False
+    show_labels = n_taxa <= MAX_LABELED_HEATMAP_TAXA
+    size = min(max(8.0, 3.0 + 0.16 * n_taxa), 20.0)
+    grid = sns.clustermap(
+        correlations, row_linkage=linkage_matrix, col_linkage=linkage_matrix,
+        cmap='RdBu_r', vmin=-1, vmax=1, center=0, xticklabels=show_labels, yticklabels=show_labels,
+        figsize=(size, size), dendrogram_ratio=0.12, cbar_pos=(0.03, 0.885, 0.02, 0.075)
+    )
+    # The color bar sits in the corner between the two dendrograms, with its title above it
+    grid.ax_cbar.set_title('SparCC\ncorrelation', fontsize=9)
+    grid.ax_cbar.tick_params(labelsize=8)
+    if show_labels:
+        grid.ax_heatmap.tick_params(labelsize=7)
+    grid.ax_heatmap.set_xlabel('')
+    grid.ax_heatmap.set_ylabel('')
+    grid.figure.suptitle(
+        f"Taxon correlations (SparCC) of {case_key}, {n_taxa} taxa\n"
+        f"clustered as for the OCUs: average linkage of the distance 0.5 x (1 - correlation)",
+        y=1.02
+    )
+    os.makedirs(os.path.dirname(path_to_plot), exist_ok=True)
+    grid.savefig(path_to_plot, dpi=150, bbox_inches='tight')
+    plt.close(grid.figure)
+    return True

@@ -1,6 +1,25 @@
 import argparse
+import os
+import sys
 
-from .compores_main import ComporesMain, CONFIG_FILE_PATH
+# Wrapped by hand, to fit an 80-column terminal
+DESCRIPTION = """\
+`CompoRes` is an algorithmic package designed to analyze correlation between
+changes in the host's microbiota and the host's gene expression. It addresses
+two significant analysis challenges: compositional statistics in the microbiota
+and multiple hypothesis testing, which can be a source of spurious correlations
+between microbiota and host."""
+
+EPILOG = """\
+examples:
+  compores --config my_config.yaml   run CompoRes on your data
+  compores --demo                    run the full synthetic demo
+  compores --config configs/config_synthetic_data_quick.yaml
+                                     run the quick synthetic test (from the
+                                     CompoRes folder)
+
+Without arguments, compores shows this help. For backward compatibility, other
+options given without --config or --demo run the demo, as in earlier versions."""
 
 
 def str_to_bool(value: str) -> bool:
@@ -12,17 +31,22 @@ def str_to_bool(value: str) -> bool:
     raise argparse.ArgumentTypeError(f"expected True or False, got '{value}'")
 
 
-def main():
-    parser = argparse.ArgumentParser(description="""`CompoRes` is an algorithmic package designed to analyze
-    correlation between changes in the host's microbiota and the host's gene expression. It addresses two
-    significant analysis challenges: compositional statistics in the microbiota and multiple hypothesis
-    testing, which can be a source of spurious correlations between microbiota and host.""")
-    parser.add_argument(
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=DESCRIPTION, epilog=EPILOG, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    input_selection = parser.add_mutually_exclusive_group()
+    input_selection.add_argument(
         '--config',
-        nargs='?',
         type=str,
-        default=CONFIG_FILE_PATH,
-        help='The path to the config file; defaults to test `config_synthetic_data.yaml`.'
+        default=None,
+        help='The path to the config file of your analysis.'
+    )
+    input_selection.add_argument(
+        '--demo',
+        action='store_true',
+        help='Run the full synthetic demo, configured by `configs/config_synthetic_data.yaml`; the results go to '
+             '`artificial_experiment_output` in the CompoRes folder, and a rerun resumes from them.'
     )
     parser.add_argument(
         '--include_otu_trace_analysis',
@@ -56,7 +80,7 @@ def main():
     parser.add_argument(
         '--no_plotting',
         action='store_true',
-        help='Do not plot the results.'
+        help='Do not plot the results, nor write the results report, `report.html`.'
     )
     parser.add_argument(
         '--ocu_case',
@@ -74,9 +98,31 @@ def main():
         help='Deduplicate the input automatically, keeping the first entry of duplicated sample tags (the flag alone, '
              'or True/False).'
     )
-    args = parser.parse_args()
+    return parser
 
-    runner = ComporesMain(args.config, ocu_case=args.ocu_case, deduplicate=args.deduplicate)
+
+def main(argv: list[str] | None = None) -> None:
+    """Runs the `compores` command with the given arguments, by default those of the command line."""
+    argv = sys.argv[1:] if argv is None else list(argv)
+    parser = build_parser()
+    # Without arguments, show the help rather than start a long analysis
+    args = parser.parse_args(argv or ['--help'])
+
+    # Imported only here, so that the help and the argument errors do not wait for the analysis modules to load
+    from .compores_main import ComporesMain, CONFIG_FILE_PATH
+
+    config_file_path = args.config
+    if config_file_path is None:
+        if not os.path.isfile(CONFIG_FILE_PATH):
+            parser.exit(1, f"{parser.prog}: error: the demo configuration {os.path.normpath(CONFIG_FILE_PATH)} was not "
+                           f"found; the demo needs CompoRes installed from its repository folder with "
+                           f"`pip install -e .`\n")
+        if not args.demo:
+            print(f"{parser.prog}: neither --config nor --demo was given, so the demo runs, as in earlier versions; "
+                  f"give --demo or --config explicitly", file=sys.stderr)
+        config_file_path = CONFIG_FILE_PATH
+
+    runner = ComporesMain(config_file_path, ocu_case=args.ocu_case, deduplicate=args.deduplicate)
     if args.no_plotting:
         runner.switch_off_plotting()
     try:

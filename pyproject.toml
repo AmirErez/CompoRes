@@ -4,17 +4,17 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "compores"
-version = "0.2.0"
+version = "0.3.0"
 description = "Compositional analysis of the association between host microbiota and host responses"
 readme = "README.md"
 license-files = ["LICENSE"]
 requires-python = ">=3.10"
 # The tested versions are pinned in env/compores_env.yml; install them with conda/mamba before `pip install -e .`
 dependencies = [
-    "numpy",
+    "numpy>=2",
     "pandas",
     "scipy",
-    "matplotlib",
+    "matplotlib>=3.10",
     "scikit-learn",
     "statsmodels",
     "seaborn",

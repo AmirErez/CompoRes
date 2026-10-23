@@ -1,5 +1,4 @@
-# This workflow will check the module called `src` within the `CompoRes` repository
-# for changes, install Python, dependencies, and run lint and tests
+# This workflow runs lint and the slow tests (`pytest -m slow`); it is started manually, from the Actions tab
 
 name: Slow Tests
 
@@ -24,20 +23,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@v44
-      - name: Check for changes
-        env:
-          CONTAINS_PROJECT: ${{ contains(steps.changed-files.outputs.all_changed_files, 'src/') ||
-                              contains(steps.changed-files.outputs.all_changed_files, 'tests/') }}
-        run: |
-          echo "PROJECT_CHANGED=$(echo $CONTAINS_PROJECT)" >> $GITHUB_ENV
       - name: Install linter
-        if: env.PROJECT_CHANGED == 'true'
         run: pip install flake8
       - name: Run linter
-        if: env.PROJECT_CHANGED == 'true'
         working-directory: ./src/compores
         run: |
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
@@ -58,6 +46,8 @@ jobs:
           pip install -e .
       - name: Run tests and build coverage file
         run: |
+          # Fail the step when pytest fails, not only when `tee` does
+          set -o pipefail
           export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src"
           export PYTHONPATH="${PYTHONPATH}:$GITHUB_WORKSPACE/src/compores"
           pytest -m slow --cov-config=.coveragerc --junitxml=pytest.xml \

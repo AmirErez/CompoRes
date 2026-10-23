@@ -149,7 +149,7 @@ def plot_roc_curve(correlated_p_values, correlated_labels, uncorrelated_p_values
         all_tpr.append(tpr)
 
     # Calculate AUROC
-    auc = np.trapz(all_tpr, all_fpr)  # TODO: check when to move to trapezoid and whether to change the env
+    auc = np.trapezoid(all_tpr, all_fpr)  # `np.trapz` was removed in NumPy 2.4
 
     with open(auroc_path, 'w') as f:
         f.write(f"AUC: {auc}")
